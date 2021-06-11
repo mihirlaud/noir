@@ -7,3 +7,4 @@ edition = "2018"
 [dependencies]
 macroquad = "0.3"
 legion = { version = "0.4.0", default-features = false, features = ["wasm-bindgen"]}
+petgraph = "*"

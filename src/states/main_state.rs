@@ -1,12 +1,18 @@
 use legion::*;
 use macroquad::prelude::*;
+use macroquad::rand::*;
 
 use super::{end_state::EndState, state::State};
-use crate::{constants::*, game::components::*};
+use crate::{
+    constants::*,
+    game::{components::*, map::Map, story::Story},
+};
 pub struct MainState {
     font: Font,
     needs_transition: String,
     world: World,
+    map: Map,
+    story: Story,
 }
 
 impl MainState {
@@ -23,10 +29,14 @@ impl MainState {
             },
         ));
 
+        let story = Story::rand_gen();
+        let map = Map::from_story(story.clone());
         Self {
             font,
             needs_transition: String::from("none"),
             world,
+            map,
+            story,
         }
     }
 }
@@ -34,6 +44,14 @@ impl MainState {
 impl State for MainState {
     fn draw(&self) {
         clear_background(BLACK);
+        // let params = TextParams {
+        //     font: self.font,
+        //     font_size: FONT_SIZE as u16,
+        //     font_scale: 1.0,
+        //     font_scale_aspect: 1.0,
+        //     color: WHITE,
+        // };
+        // draw_text_ex(&format!("{:?}", self.story), 0.0, 12.0, params);
 
         let mut query = <(&Position, &Glyph)>::query();
 

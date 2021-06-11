@@ -11,6 +11,7 @@ use states::state::*;
 
 #[macroquad::main("Noir")]
 async fn main() {
+
     let font = load_ttf_font("square.ttf").await.unwrap();
 
     let mut now = get_time();
