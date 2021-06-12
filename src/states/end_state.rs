@@ -1,41 +1,45 @@
-use crate::constants::FONT_SIZE;
-
 use super::state::State;
-use macroquad::prelude::*;
 
-pub struct EndState {
-    font: Font,
-}
+use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
+
+pub struct EndState {}
 
 impl EndState {
-    pub fn new(font: Font) -> Self {
-        Self { font }
+    pub fn new() -> Self {
+        Self {}
     }
 }
 
 impl State for EndState {
-    fn draw(&self) {
-        clear_background(BLACK);
-        let params = TextParams {
-            font: self.font,
-            font_size: FONT_SIZE as u16,
-            font_scale: 1.0,
-            font_scale_aspect: 1.0,
-            color: WHITE,
-        };
-        draw_text_ex(
-            "THANK YOU FOR PLAYING",
-            screen_width() / 2.0 - 21.0 * FONT_SIZE / 2.0,
-            screen_height() / 2.0 - 1.0 * FONT_SIZE / 2.0,
-            params,
-        );
+    fn draw(&self) -> Result<(), JsValue> {
+        crate::clear_canvas();
+
+        let document = web_sys::window().unwrap().document().unwrap();
+        let canvas = document.get_element_by_id("canvas").unwrap();
+        let canvas: web_sys::HtmlCanvasElement = canvas
+            .dyn_into::<web_sys::HtmlCanvasElement>()
+            .map_err(|_| ())
+            .unwrap();
+
+        let context = canvas
+            .get_context("2d")
+            .unwrap()
+            .unwrap()
+            .dyn_into::<web_sys::CanvasRenderingContext2d>()
+            .unwrap();
+
+        context.set_font("20px square-font");
+        context.set_fill_style(&JsValue::from("white"));
+
+        context.fill_text("THANK YOU FOR PLAYING", 0.0, 20.0)?;
+
+        Ok(())
     }
 
-    fn handle_events(&mut self) {}
+    fn handle_events(&mut self, event: web_sys::KeyboardEvent) {}
 
-    fn tick(&mut self) {}
-
-    fn transition(&self) -> Option<Box<dyn State>> {
+    fn transition(&self) -> Option<String> {
         None
     }
 }

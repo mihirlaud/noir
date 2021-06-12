@@ -1,10 +1,6 @@
-cargo build --target wasm32-unknown-unknown --release
+wasm-pack build --target web --out-name wasm --out-dir docs/js
 
-rm -rf docs
-mkdir docs
+cd docs\\js
+rm .gitignore
 
-cp target/wasm32-unknown-unknown/release/noir.wasm docs/
-cp target/wasm32-unknown-unknown/release/noir.d docs/
-cp utils/index.html docs/
-cp utils/gl.js docs/
-cp utils/square.ttf docs/
+cd ..\\..
