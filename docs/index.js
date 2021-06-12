@@ -24,8 +24,14 @@ async function run() {
     };
 
     await init();
-
-    start_game();
+    
+    var font = new FontFace("square-font", "url(square.ttf)");
+    font.load().then(function (loadedFont){
+        document.fonts.add(loadedFont)
+        start_game();
+    }).catch(function(error) {
+        console.log('Failed to load font: ' + error)
+    })
 }
 
 run();
