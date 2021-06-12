@@ -1,9 +1,9 @@
+use wasm_bindgen::JsValue;
+
 pub trait State {
-    fn draw(&self);
+    fn draw(&self) -> Result<(), JsValue>;
 
-    fn handle_events(&mut self);
+    fn handle_events(&mut self, event: web_sys::KeyboardEvent);
 
-    fn tick(&mut self);
-
-    fn transition(&self) -> Option<Box<dyn State>>;
+    fn transition(&self) -> Option<String>;
 }
