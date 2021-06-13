@@ -4,23 +4,13 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
 pub struct StartState {
+    ctx: web_sys::CanvasRenderingContext2d,
     transition: String,
     selected: i32,
 }
 
 impl StartState {
     pub fn new() -> Self {
-        Self {
-            transition: "none".to_string(),
-            selected: 1,
-        }
-    }
-}
-
-impl State for StartState {
-    fn draw(&self) -> Result<(), JsValue> {
-        crate::clear_canvas();
-
         let document = web_sys::window().unwrap().document().unwrap();
         let canvas = document.get_element_by_id("canvas").unwrap();
         let canvas: web_sys::HtmlCanvasElement = canvas
@@ -35,10 +25,22 @@ impl State for StartState {
             .dyn_into::<web_sys::CanvasRenderingContext2d>()
             .unwrap();
 
-        context.set_font("20px square-font");
-        context.set_fill_style(&JsValue::from("white"));
+        Self {
+            ctx: context,
+            transition: "none".to_string(),
+            selected: 1,
+        }
+    }
+}
 
-        context.fill_text("NOIR", 0.0, 20.0)?;
+impl State for StartState {
+    fn draw(&self) -> Result<(), JsValue> {
+        crate::clear_canvas();
+
+        self.ctx.set_font("20px square-font");
+        self.ctx.set_fill_style(&JsValue::from("white"));
+
+        self.ctx.fill_text("NOIR", 0.0, 20.0)?;
 
         let play_text = if self.selected == 1 {
             "> PLAY"
@@ -51,8 +53,8 @@ impl State for StartState {
             "> EXIT"
         };
 
-        context.fill_text(play_text, 0.0, 60.0)?;
-        context.fill_text(exit_text, 0.0, 100.0)?;
+        self.ctx.fill_text(play_text, 0.0, 60.0)?;
+        self.ctx.fill_text(exit_text, 0.0, 100.0)?;
 
         Ok(())
     }

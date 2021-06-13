@@ -1,3 +1,4 @@
+mod game;
 mod states;
 
 use states::end_state::EndState;
@@ -40,13 +41,13 @@ pub fn start_game() {
 
     let document = window.document().unwrap();
 
-    let a = Closure::wrap(Box::new(move |event: Event| {
+    let a = Closure::wrap(Box::new(move |_event: Event| {
         game_loop();
     }) as Box<dyn FnMut(_)>);
     document.add_event_listener_with_callback("transition-main", a.as_ref().unchecked_ref());
     a.forget();
 
-    let a = Closure::wrap(Box::new(move |event: Event| {
+    let a = Closure::wrap(Box::new(move |_event: Event| {
         exit();
     }) as Box<dyn FnMut(_)>);
     document.add_event_listener_with_callback("transition-exit", a.as_ref().unchecked_ref());
