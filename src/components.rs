@@ -1,9 +1,17 @@
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Position {
-    x: i32,
-    y: i32,
+    pub x: i32,
+    pub y: i32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Velocity {
+    pub x: i32,
+    pub y: i32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Glyph<'a> {
-    char: Character,
-    color: &'a str,
+    pub char: char,
+    pub color: &'a str,
 }

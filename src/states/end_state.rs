@@ -3,6 +3,7 @@ use super::state::State;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
+#[derive(Clone)]
 pub struct EndState {}
 
 impl EndState {
@@ -12,6 +13,10 @@ impl EndState {
 }
 
 impl State for EndState {
+    fn box_clone(&self) -> Box<State> {
+        Box::new((*self).clone())
+    }
+
     fn draw(&self) -> Result<(), JsValue> {
         crate::clear_canvas();
 

@@ -1,3 +1,5 @@
+mod components;
+mod constants;
 mod game;
 mod states;
 
@@ -5,6 +7,7 @@ use states::end_state::EndState;
 use states::main_state::MainState;
 use states::start_state::StartState;
 use states::state::State;
+use states::state_machine::StateMachine;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::Event;
@@ -17,41 +20,8 @@ pub fn main() -> Result<(), JsValue> {
 
 #[wasm_bindgen]
 pub fn start_game() {
-    let mut start_state = StartState::new();
-    start_state.draw();
-
-    let window = web_sys::window().unwrap();
-    let a = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| {
-        start_state.handle_events(event);
-
-        start_state.draw();
-
-        if start_state.transition().is_some() {
-            let event =
-                web_sys::Event::new(start_state.transition().unwrap().as_str()).expect("error");
-            web_sys::window()
-                .unwrap()
-                .document()
-                .unwrap()
-                .dispatch_event(&event);
-        }
-    }) as Box<dyn FnMut(_)>);
-    window.set_onkeydown(Some(a.as_ref().unchecked_ref()));
-    a.forget();
-
-    let document = window.document().unwrap();
-
-    let a = Closure::wrap(Box::new(move |_event: Event| {
-        game_loop();
-    }) as Box<dyn FnMut(_)>);
-    document.add_event_listener_with_callback("transition-main", a.as_ref().unchecked_ref());
-    a.forget();
-
-    let a = Closure::wrap(Box::new(move |_event: Event| {
-        exit();
-    }) as Box<dyn FnMut(_)>);
-    document.add_event_listener_with_callback("transition-exit", a.as_ref().unchecked_ref());
-    a.forget();
+    let mut machine = StateMachine::new();
+    //machine.switch();
 }
 
 pub fn game_loop() {

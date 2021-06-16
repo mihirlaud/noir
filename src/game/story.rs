@@ -3,7 +3,7 @@ use js_sys::Math::random;
 
 use petgraph::prelude::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Story {
     setting: Setting,
     people: UnGraph<Person, f64>,
@@ -18,7 +18,7 @@ impl Story {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Setting {
     location: String,
 }
@@ -37,7 +37,7 @@ impl Setting {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Person {
     first_name: String,
     last_name: String,
