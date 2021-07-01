@@ -1,6 +1,8 @@
-wasm-pack build --target web --out-name wasm --out-dir docs/js
+cargo build --target wasm32-unknown-unknown --release
 
-cd docs\\js
-rm .gitignore
+rm -rf docs
+mkdir docs
 
-cd ..\\..
+wasm-bindgen target/wasm32-unknown-unknown/release/noir.wasm --out-dir docs --no-modules --no-typescript
+cp utils/index.html docs
+cp utils/styles.css docs
