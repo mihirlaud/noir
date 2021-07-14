@@ -29,7 +29,7 @@ impl Map {
                     bg: rltk::RGB::named(rltk::BLACK),
                 })
                 .with(ConversationAI {
-                    innocent: suspect.is_killer,
+                    innocent: !suspect.is_killer,
                 })
                 .build();
 

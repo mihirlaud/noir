@@ -4,20 +4,28 @@ mod gui;
 mod map;
 mod story;
 
+use std::collections::HashMap;
+
 use components::*;
 use constants::*;
-use gui::{GameOverResult, MainMenuSelection};
+use gui::{
+    draw_log, draw_sidebar, log_message, GameOverResult, MainMenuSelection, PauseMenuSelection,
+};
 use map::Tile;
 use rltk::{Console, GameState, Rltk, VirtualKeyCode, RGB};
 use specs::prelude::*;
-use std::cmp::{max, min};
 
-use crate::{map::Map, story::Story};
+use crate::{
+    gui::{Log, Message, Options},
+    map::Map,
+    story::Story,
+};
 
 #[derive(PartialEq, Clone, Copy)]
 enum RunState {
     MainMenu { selection: MainMenuSelection },
     AwaitingInput,
+    Paused { selection: PauseMenuSelection },
     GameOver { result: GameOverResult },
 }
 
@@ -25,11 +33,18 @@ pub struct State {
     ecs: World,
 }
 
-impl State {}
+impl State {
+    fn run_systems(&mut self) {
+        let mut conversation_checker = ConversationChecker {};
+        conversation_checker.run_now(&self.ecs);
+        self.ecs.maintain();
+    }
+}
 
 impl GameState for State {
     fn tick(&mut self, ctx: &mut Rltk) {
         ctx.cls();
+        self.run_systems();
 
         let mut newrunstate;
         {
@@ -41,8 +56,6 @@ impl GameState for State {
             RunState::MainMenu { .. } => {}
             RunState::GameOver { .. } => {}
             _ => {
-                let renderables = self.ecs.read_storage::<Renderable>();
-
                 let player_pos = self.ecs.fetch::<PlayerPosition>();
                 let player_render = self.ecs.fetch::<Renderable>();
 
@@ -58,6 +71,7 @@ impl GameState for State {
                 );
 
                 let positions = self.ecs.read_storage::<Position>();
+                let renderables = self.ecs.read_storage::<Renderable>();
 
                 for (pos, render) in (&positions, &renderables).join() {
                     ctx.set(
@@ -68,6 +82,9 @@ impl GameState for State {
                         render.glyph,
                     );
                 }
+
+                draw_log(self, ctx);
+                draw_sidebar(self, ctx);
             }
         };
 
@@ -90,6 +107,23 @@ impl GameState for State {
             }
             RunState::AwaitingInput => {
                 newrunstate = player_input(self, ctx);
+            }
+            RunState::Paused { .. } => {
+                let result = gui::pause_menu(self, ctx);
+
+                match result {
+                    gui::PauseMenuResult::NoSelection { selection } => {
+                        newrunstate = RunState::Paused { selection }
+                    }
+                    gui::PauseMenuResult::Selection { selection } => match selection {
+                        PauseMenuSelection::Return => newrunstate = RunState::AwaitingInput,
+                        PauseMenuSelection::Quit => {
+                            newrunstate = RunState::GameOver {
+                                result: GameOverResult::None,
+                            }
+                        }
+                    },
+                };
             }
             RunState::GameOver { .. } => {
                 let result = gui::game_over(ctx);
@@ -125,18 +159,7 @@ fn main() {
 
     gs.ecs.register::<Position>();
     gs.ecs.register::<Renderable>();
-    gs.ecs.register::<Player>();
     gs.ecs.register::<ConversationAI>();
-
-    gs.ecs
-        .create_entity()
-        .with(Player {})
-        .with(Renderable {
-            glyph: rltk::to_cp437('@'),
-            fg: RGB::named(rltk::WHITE),
-            bg: RGB::named(rltk::BLACK),
-        })
-        .build();
 
     gs.ecs.insert(PlayerPosition { x: 1, y: 1 });
     gs.ecs.insert(Renderable {
@@ -155,6 +178,26 @@ fn main() {
     gs.ecs.insert(story);
     gs.ecs.insert(map);
 
+    let hello_noir = Message::new("06:00", "Game", "Hello Noir!", RGB::named(rltk::RED));
+    let player_msg = Message::new(
+        "10:00",
+        "You",
+        "How are you today?",
+        RGB::named(rltk::WHITE),
+    );
+
+    let log = Log {
+        log: vec![hello_noir, player_msg],
+    };
+    gs.ecs.insert(log);
+
+    let mut options = HashMap::new();
+    options.insert('P', "Pause".to_string());
+    options.insert('I', "Inventory".to_string());
+
+    let options = Options { options };
+    gs.ecs.insert(options);
+
     rltk::main_loop(context, gs)
 }
 
@@ -163,7 +206,18 @@ fn try_move_player(delta_x: i32, delta_y: i32, ecs: &mut World) {
 
     let map = ecs.fetch::<Map>();
 
-    if map.get_tile(pos.x + delta_x, pos.y + delta_y) == Tile::Floor {
+    let positions = ecs.read_storage::<Position>();
+
+    let mut blocked = false;
+
+    for position in (&positions).join() {
+        if position.x == pos.x + delta_x && position.y == pos.y + delta_y {
+            blocked = true;
+            break;
+        }
+    }
+
+    if !blocked && map.get_tile(pos.x + delta_x, pos.y + delta_y) == Tile::Floor {
         pos.x = pos.x + delta_x;
         pos.y = pos.y + delta_y;
     }
@@ -181,7 +235,13 @@ fn player_input(gs: &mut State, ctx: &mut Rltk) -> RunState {
             VirtualKeyCode::Right => try_move_player(1, 0, &mut gs.ecs),
             VirtualKeyCode::Up => try_move_player(0, -1, &mut gs.ecs),
             VirtualKeyCode::Down => try_move_player(0, 1, &mut gs.ecs),
-            VirtualKeyCode::A => {
+            VirtualKeyCode::P => {
+                return RunState::Paused {
+                    selection: PauseMenuSelection::Return,
+                }
+            }
+            VirtualKeyCode::I => {}
+            VirtualKeyCode::Tab => {
                 let story = gs.ecs.fetch::<Story>();
                 rltk::console::log(&format!("{:?}", *story));
             }
