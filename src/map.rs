@@ -16,6 +16,7 @@ impl Map {
     pub fn from_story(story: &Story, gs: &mut State) -> Self {
         let mut x = 5;
         for suspect in story.suspects.iter() {
+            rltk::console::log(&format!("{}", suspect.name));
             gs.ecs
                 .create_entity()
                 .with(Position { x, y: 10 })
@@ -28,12 +29,15 @@ impl Map {
                     },
                     bg: rltk::RGB::named(rltk::BLACK),
                 })
+                .with(Character {
+                    name: suspect.name.clone(),
+                })
                 .with(ConversationAI {
                     innocent: !suspect.is_killer,
                 })
                 .build();
 
-            x += 1;
+            x += 5;
         }
 
         let tiles = vec![Tile::Floor; (MAP_WIDTH * MAP_HEIGHT) as usize];

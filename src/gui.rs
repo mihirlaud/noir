@@ -1,9 +1,10 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use super::RunState;
 
 use super::State;
 use crate::constants::*;
+use rltk::VirtualKeyCode;
 use rltk::{Console, Rltk, RGB};
 
 #[derive(PartialEq, Clone, Copy)]
@@ -164,7 +165,7 @@ pub fn draw_box(ctx: &mut Rltk, rect: rltk::Rect, outline_color: RGB) {
 
 #[derive(PartialEq, Clone)]
 pub struct Options {
-    pub options: HashMap<char, String>,
+    pub options: BTreeMap<char, String>,
 }
 
 impl Options {
@@ -251,7 +252,7 @@ pub fn draw_log(gs: &State, ctx: &mut Rltk) {
 
     let log = gs.ecs.fetch::<Log>().log.clone();
     let mut y = SCREEN_HEIGHT - 2;
-    for msg in log.iter().rev() {
+    for msg in log.iter() {
         ctx.print_color(
             1,
             y,
@@ -268,7 +269,7 @@ pub fn draw_log(gs: &State, ctx: &mut Rltk) {
 
 pub fn log_message(gs: &mut State, msg: Message) {
     let mut log = gs.ecs.fetch::<Log>().log.clone();
-    log.push(msg);
+    log.insert(0, msg);
     let log = Log { log };
     gs.ecs.insert(log);
 }
@@ -304,7 +305,7 @@ pub fn pause_menu(gs: &mut State, ctx: &mut Rltk) -> PauseMenuResult {
     if let RunState::Paused { selection } = *runstate {
         if selection == PauseMenuSelection::Return {
             ctx.print_color(
-                x1 + 2,
+                x1 + 1,
                 y1 + 3,
                 RGB::named(rltk::WHITE),
                 RGB::named(rltk::BLACK),
@@ -312,7 +313,7 @@ pub fn pause_menu(gs: &mut State, ctx: &mut Rltk) -> PauseMenuResult {
             );
         } else {
             ctx.print_color(
-                x1 + 2,
+                x1 + 1,
                 y1 + 3,
                 RGB::named(rltk::WHITE),
                 RGB::named(rltk::BLACK),
@@ -322,7 +323,7 @@ pub fn pause_menu(gs: &mut State, ctx: &mut Rltk) -> PauseMenuResult {
 
         if selection == PauseMenuSelection::Quit {
             ctx.print_color(
-                x1 + 2,
+                x1 + 1,
                 y1 + 5,
                 RGB::named(rltk::WHITE),
                 RGB::named(rltk::BLACK),
@@ -330,7 +331,7 @@ pub fn pause_menu(gs: &mut State, ctx: &mut Rltk) -> PauseMenuResult {
             );
         } else {
             ctx.print_color(
-                x1 + 2,
+                x1 + 1,
                 y1 + 5,
                 RGB::named(rltk::WHITE),
                 RGB::named(rltk::BLACK),
@@ -369,5 +370,71 @@ pub fn pause_menu(gs: &mut State, ctx: &mut Rltk) -> PauseMenuResult {
 
     PauseMenuResult::NoSelection {
         selection: PauseMenuSelection::Return,
+    }
+}
+
+pub fn draw_talk_panel(gs: &State, ctx: &mut Rltk) {
+    let rect = rltk::Rect::with_size(0, 0, TALK_PANEL_WIDTH, TALK_PANEL_HEIGHT);
+    draw_box(ctx, rect, RGB::named(rltk::WHITE));
+}
+
+pub enum ViewLogResult {
+    None(usize),
+    Up(usize),
+    Down(usize),
+    Exit,
+}
+
+pub fn view_log(gs: &State, ctx: &mut Rltk, page: usize) -> ViewLogResult {
+    let rect = rltk::Rect::with_size(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+    draw_box(ctx, rect, RGB::named(rltk::WHITE));
+
+    ctx.print_color_centered(
+        1,
+        RGB::named(rltk::WHITE),
+        RGB::named(rltk::BLACK),
+        "~~ LOG ~~",
+    );
+
+    let log = gs.ecs.fetch::<Log>().log.clone();
+    let mut y = SCREEN_HEIGHT - 4;
+    for i in page * (SCREEN_HEIGHT - 5) as usize..(page + 1) * (SCREEN_HEIGHT - 5) as usize {
+        if log.get(i).is_some() {
+            let msg = log[i].clone();
+            ctx.print_color(
+                1,
+                y,
+                msg.color(),
+                RGB::named(rltk::BLACK),
+                msg.to_string().as_str(),
+            );
+            y -= 1;
+        } else {
+            break;
+        }
+    }
+
+    ctx.print_color(
+        1,
+        SCREEN_HEIGHT - 2,
+        RGB::named(rltk::WHITE),
+        RGB::named(rltk::BLACK),
+        "Press [Esc] to leave. Use [Up] and [Down] to scroll.",
+    );
+
+    match ctx.key {
+        None => ViewLogResult::None(page),
+        Some(key) => match key {
+            VirtualKeyCode::Up => {
+                ViewLogResult::Up(if log.len() > (page + 1) * (SCREEN_HEIGHT - 5) as usize {
+                    page + 1
+                } else {
+                    page
+                })
+            }
+            VirtualKeyCode::Down => ViewLogResult::Down(if page > 0 { page - 1 } else { page }),
+            VirtualKeyCode::Escape => ViewLogResult::Exit,
+            _ => ViewLogResult::None(page),
+        },
     }
 }

@@ -2,7 +2,7 @@ use rltk::RGB;
 use specs::prelude::*;
 use specs_derive::Component;
 
-use crate::gui::{self, Options};
+use crate::gui::Options;
 
 #[derive(Component)]
 pub struct Position {
@@ -49,4 +49,9 @@ impl<'a> System<'a> for ConversationChecker {
             }
         }
     }
+}
+
+#[derive(Component)]
+pub struct Character {
+    pub name: String,
 }

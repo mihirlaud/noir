@@ -2,17 +2,18 @@ mod components;
 mod constants;
 mod gui;
 mod map;
+mod player;
 mod story;
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use components::*;
 use constants::*;
 use gui::{
-    draw_log, draw_sidebar, log_message, GameOverResult, MainMenuSelection, PauseMenuSelection,
+    draw_log, draw_sidebar, draw_talk_panel, view_log, GameOverResult, MainMenuSelection,
+    PauseMenuSelection,
 };
-use map::Tile;
-use rltk::{Console, GameState, Rltk, VirtualKeyCode, RGB};
+use rltk::{Console, GameState, Rltk, RGB};
 use specs::prelude::*;
 
 use crate::{
@@ -22,9 +23,11 @@ use crate::{
 };
 
 #[derive(PartialEq, Clone, Copy)]
-enum RunState {
+pub enum RunState {
     MainMenu { selection: MainMenuSelection },
     AwaitingInput,
+    Talking,
+    Log { page: usize },
     Paused { selection: PauseMenuSelection },
     GameOver { result: GameOverResult },
 }
@@ -38,6 +41,53 @@ impl State {
         let mut conversation_checker = ConversationChecker {};
         conversation_checker.run_now(&self.ecs);
         self.ecs.maintain();
+    }
+
+    fn new_game(&mut self) {
+        self.ecs = World::new();
+
+        self.ecs.register::<Position>();
+        self.ecs.register::<Renderable>();
+        self.ecs.register::<ConversationAI>();
+        self.ecs.register::<Character>();
+
+        self.ecs.insert(RunState::MainMenu {
+            selection: MainMenuSelection::Play,
+        });
+
+        self.ecs.insert(PlayerPosition { x: 1, y: 1 });
+        self.ecs.insert(Renderable {
+            glyph: rltk::to_cp437('@'),
+            fg: RGB::named(rltk::WHITE),
+            bg: RGB::named(rltk::BLACK),
+        });
+
+        let story = Story::gen_rand();
+        let map = Map::from_story(&story, self);
+
+        self.ecs.insert(story);
+        self.ecs.insert(map);
+
+        let hello_noir = Message::new("06:00", "Game", "Hello Noir!", RGB::named(rltk::RED));
+        let player_msg = Message::new(
+            "10:00",
+            "You",
+            "How are you today?",
+            RGB::named(rltk::WHITE),
+        );
+
+        let log = Log {
+            log: vec![player_msg, hello_noir],
+        };
+        self.ecs.insert(log);
+
+        let mut options = BTreeMap::new();
+        options.insert('P', "Pause".to_string());
+        options.insert('I', "Inventory".to_string());
+        options.insert('L', "View Log".to_string());
+
+        let options = Options { options };
+        self.ecs.insert(options);
     }
 }
 
@@ -55,6 +105,11 @@ impl GameState for State {
         match newrunstate {
             RunState::MainMenu { .. } => {}
             RunState::GameOver { .. } => {}
+            RunState::Talking => {
+                draw_talk_panel(self, ctx);
+                draw_log(self, ctx);
+                draw_sidebar(self, ctx);
+            }
             _ => {
                 let player_pos = self.ecs.fetch::<PlayerPosition>();
                 let player_render = self.ecs.fetch::<Renderable>();
@@ -96,7 +151,9 @@ impl GameState for State {
                         newrunstate = RunState::MainMenu { selection }
                     }
                     gui::MainMenuResult::Selection { selection } => match selection {
-                        MainMenuSelection::Play => newrunstate = RunState::AwaitingInput,
+                        MainMenuSelection::Play => {
+                            newrunstate = RunState::AwaitingInput;
+                        }
                         MainMenuSelection::Quit => {
                             newrunstate = RunState::GameOver {
                                 result: GameOverResult::None,
@@ -106,7 +163,23 @@ impl GameState for State {
                 };
             }
             RunState::AwaitingInput => {
-                newrunstate = player_input(self, ctx);
+                newrunstate = player::input(self, ctx);
+            }
+            RunState::Talking => {}
+            RunState::Log { page } => {
+                let result = view_log(self, ctx, page);
+                match result {
+                    gui::ViewLogResult::None(new_page) => {
+                        newrunstate = RunState::Log { page: new_page }
+                    }
+                    gui::ViewLogResult::Up(new_page) => {
+                        newrunstate = RunState::Log { page: new_page }
+                    }
+                    gui::ViewLogResult::Down(new_page) => {
+                        newrunstate = RunState::Log { page: new_page }
+                    }
+                    gui::ViewLogResult::Exit => newrunstate = RunState::AwaitingInput,
+                }
             }
             RunState::Paused { .. } => {
                 let result = gui::pause_menu(self, ctx);
@@ -137,6 +210,7 @@ impl GameState for State {
                         newrunstate = RunState::MainMenu {
                             selection: MainMenuSelection::Play,
                         };
+                        self.new_game();
                     }
                 }
             }
@@ -157,96 +231,7 @@ fn main() {
 
     let mut gs = State { ecs: World::new() };
 
-    gs.ecs.register::<Position>();
-    gs.ecs.register::<Renderable>();
-    gs.ecs.register::<ConversationAI>();
-
-    gs.ecs.insert(PlayerPosition { x: 1, y: 1 });
-    gs.ecs.insert(Renderable {
-        glyph: rltk::to_cp437('@'),
-        fg: RGB::named(rltk::WHITE),
-        bg: RGB::named(rltk::BLACK),
-    });
-
-    gs.ecs.insert(RunState::MainMenu {
-        selection: MainMenuSelection::Play,
-    });
-
-    let story = Story::gen_rand();
-    let map = Map::from_story(&story, &mut gs);
-
-    gs.ecs.insert(story);
-    gs.ecs.insert(map);
-
-    let hello_noir = Message::new("06:00", "Game", "Hello Noir!", RGB::named(rltk::RED));
-    let player_msg = Message::new(
-        "10:00",
-        "You",
-        "How are you today?",
-        RGB::named(rltk::WHITE),
-    );
-
-    let log = Log {
-        log: vec![hello_noir, player_msg],
-    };
-    gs.ecs.insert(log);
-
-    let mut options = HashMap::new();
-    options.insert('P', "Pause".to_string());
-    options.insert('I', "Inventory".to_string());
-
-    let options = Options { options };
-    gs.ecs.insert(options);
+    gs.new_game();
 
     rltk::main_loop(context, gs)
-}
-
-fn try_move_player(delta_x: i32, delta_y: i32, ecs: &mut World) {
-    let mut pos = *ecs.fetch::<PlayerPosition>();
-
-    let map = ecs.fetch::<Map>();
-
-    let positions = ecs.read_storage::<Position>();
-
-    let mut blocked = false;
-
-    for position in (&positions).join() {
-        if position.x == pos.x + delta_x && position.y == pos.y + delta_y {
-            blocked = true;
-            break;
-        }
-    }
-
-    if !blocked && map.get_tile(pos.x + delta_x, pos.y + delta_y) == Tile::Floor {
-        pos.x = pos.x + delta_x;
-        pos.y = pos.y + delta_y;
-    }
-
-    let mut new_pos = ecs.write_resource::<PlayerPosition>();
-    *new_pos = pos;
-}
-
-fn player_input(gs: &mut State, ctx: &mut Rltk) -> RunState {
-    // Player movement
-    match ctx.key {
-        None => {} // Nothing happened
-        Some(key) => match key {
-            VirtualKeyCode::Left => try_move_player(-1, 0, &mut gs.ecs),
-            VirtualKeyCode::Right => try_move_player(1, 0, &mut gs.ecs),
-            VirtualKeyCode::Up => try_move_player(0, -1, &mut gs.ecs),
-            VirtualKeyCode::Down => try_move_player(0, 1, &mut gs.ecs),
-            VirtualKeyCode::P => {
-                return RunState::Paused {
-                    selection: PauseMenuSelection::Return,
-                }
-            }
-            VirtualKeyCode::I => {}
-            VirtualKeyCode::Tab => {
-                let story = gs.ecs.fetch::<Story>();
-                rltk::console::log(&format!("{:?}", *story));
-            }
-            _ => {}
-        },
-    }
-    RunState::AwaitingInput
 }
