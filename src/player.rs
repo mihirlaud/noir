@@ -4,10 +4,9 @@ use crate::gui::PauseMenuSelection;
 use crate::map::Map;
 use crate::map::Tile;
 use crate::story::Story;
-use crate::story::Suspect;
 use crate::RunState;
 use crate::State;
-use rltk::{Rltk, VirtualKeyCode, RGB};
+use rltk::{Rltk, VirtualKeyCode};
 use specs::prelude::*;
 
 pub fn try_move_player(delta_x: i32, delta_y: i32, ecs: &mut World) {
@@ -58,35 +57,12 @@ pub fn input(gs: &mut State, ctx: &mut Rltk) -> RunState {
             }
             VirtualKeyCode::T => {
                 if gs.ecs.fetch::<Options>().options.contains_key(&'T') {
-                    let mut speaker = Suspect {
-                        name: "".to_string(),
-                        age: 0,
-                        color: RGB::named(rltk::WHITE),
-                        is_killer: false,
-                        hair_color: "none".to_string(),
-                        shoe_size: "none".to_string(),
-                    };
-                    let mut conversation = ConversationAI { innocent: true };
-                    {
-                        let player_pos = gs.ecs.fetch::<PlayerPosition>();
-
-                        let positions = gs.ecs.read_storage::<Position>();
-                        let conversables = gs.ecs.read_storage::<ConversationAI>();
-                        let suspects = gs.ecs.read_storage::<Suspect>();
-
-                        for (pos, con, suspect) in (&positions, &conversables, &suspects).join() {
-                            if (pos.x - player_pos.x).abs() <= 1
-                                && (pos.y - player_pos.y).abs() <= 1
-                            {
-                                speaker = suspect.clone();
-                                conversation = con.clone();
-                                break;
-                            }
-                        }
-                    }
-                    gs.ecs.insert(speaker);
-                    gs.ecs.insert(conversation);
                     return RunState::Talking;
+                }
+            }
+            VirtualKeyCode::X => {
+                if gs.ecs.fetch::<Options>().options.contains_key(&'X') {
+                    return RunState::Examining;
                 }
             }
             VirtualKeyCode::Tab => {

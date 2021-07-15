@@ -2,6 +2,8 @@ use rltk::{RandomNumberGenerator, RGB};
 use specs::prelude::*;
 use specs_derive::Component;
 
+use crate::constants::*;
+
 #[derive(Debug)]
 pub struct Story {
     pub victim: Victim,
@@ -60,7 +62,7 @@ impl Victim {
     }
 }
 
-#[derive(Component, Debug, Clone)]
+#[derive(Component, Debug, Clone, Default)]
 pub struct Suspect {
     pub name: String,
     pub age: i32,
@@ -97,7 +99,11 @@ impl Suspect {
         Suspect {
             name,
             age,
-            color: RGB::named(rltk::YELLOW),
+            color: if is_killer {
+                RGB::named(rltk::RED)
+            } else {
+                RGB::named(rltk::YELLOW)
+            },
             is_killer,
             hair_color,
             shoe_size,
@@ -115,10 +121,14 @@ impl Suspect {
     }
 }
 
-#[derive(Debug)]
+#[derive(Component, Clone, Debug)]
 pub struct Clue {
-    name: String,
-    is_murder_weapon: bool,
+    pub name: String,
+    pub color: RGB,
+    pub is_murder_weapon: bool,
+    pub display: Vec<String>,
+    pub tags: Vec<String>,
+    pub markers: Vec<(i32, i32, String)>,
 }
 
 impl Clue {
@@ -132,9 +142,95 @@ impl Clue {
             name = victim.weapon_used.to_string();
         }
 
+        let display = match name.as_str() {
+            "knife" => {
+                vec![
+                    "___________________________________ ______________________  ".to_string(),
+                    "\\                                  | (_)     (_)    (_)   \\ ".to_string(),
+                    " `.                                |  __________________   }".to_string(),
+                    "   `-..........................____|_(                  )_/ ".to_string(),
+                ]
+            }
+            "gun" => {
+                vec![
+                    " _ ________,".to_string(),
+                    " >`(==(----'".to_string(),
+                    "(__/~~`     ".to_string(),
+                ]
+            }
+            "poison" => {
+                vec![
+                    "     o=o     ".to_string(),
+                    "     | |     ".to_string(),
+                    "  ___| |___  ".to_string(),
+                    " /         \\ ".to_string(),
+                    "|    .-.    |".to_string(),
+                    "|   (0.0)   |".to_string(),
+                    "| '=.|m|.=' |".to_string(),
+                    "| .='`\"``=. |".to_string(),
+                    " \\_________/ ".to_string(),
+                ]
+            }
+            "wrench" => {
+                vec![
+                    "-------".to_string(),
+                    "|     |".to_string(),
+                    "|     |".to_string(),
+                    "|     |".to_string(),
+                    "|     |".to_string(),
+                    "|     |".to_string(),
+                    "-------".to_string(),
+                ]
+            }
+            _ => vec!["".to_string()],
+        };
+
+        let tags = vec![
+            "Killer left a partial fingerprint.".to_string(),
+            "Killer's hair is on the weapon.".to_string(),
+        ];
+
+        let mut markers = vec![];
+
+        for tag in tags.clone() {
+            let mut rand = rltk::RandomNumberGenerator::new();
+
+            let w = display[0].len() as i32;
+            let h = display.len() as i32;
+
+            loop {
+                let x: i32 = EXAM_PANEL_WIDTH / 2 - w / 2 + rand.range(0, w);
+                let y: i32 = EXAM_PANEL_HEIGHT / 2 - h / 2 + rand.range(0, h);
+
+                let mut available = true;
+
+                for (marker_x, marker_y, _) in markers.clone() {
+                    let marker_x: i32 = marker_x;
+                    let marker_y: i32 = marker_y;
+                    if (x - marker_x).abs() <= 2 && (y - marker_y).abs() <= 2 {
+                        available = false;
+                        break;
+                    }
+                }
+
+                if available {
+                    markers.push((x, y, tag));
+                    break;
+                }
+            }
+        }
+
         Clue {
             name,
+            color: if is_murder_weapon {
+                RGB::named(rltk::PURPLE)
+            } else {
+                RGB::named(rltk::LIMEGREEN)
+            },
             is_murder_weapon,
+            display,
+            tags,
+            markers,
         }
     }
 

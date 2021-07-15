@@ -5,9 +5,11 @@ use super::RunState;
 use super::State;
 use crate::components::ConversationAI;
 use crate::constants::*;
+use crate::story::Clue;
 use crate::story::Suspect;
 use rltk::VirtualKeyCode;
 use rltk::{Console, Rltk, RGB};
+use specs::Entity;
 use specs::WorldExt;
 
 #[derive(PartialEq, Clone, Copy)]
@@ -213,6 +215,10 @@ impl Time {
 
     pub fn advance_hour(&mut self) {
         self.hour += 1;
+        if self.hour > 23 {
+            self.hour = 0;
+            self.increment_day();
+        }
     }
 
     pub fn advance_minute(&mut self) {
@@ -476,7 +482,10 @@ pub fn draw_talk_panel(gs: &mut State, ctx: &mut Rltk) -> RunState {
     let rect = rltk::Rect::with_size(0, 0, TALK_PANEL_WIDTH, TALK_PANEL_HEIGHT);
     draw_box(ctx, rect, RGB::named(rltk::WHITE));
 
-    let speaker = gs.ecs.fetch::<Suspect>();
+    let entity = gs.ecs.read_resource::<Entity>();
+
+    let mut speaker_store = gs.ecs.write_storage::<Suspect>();
+    let mut speaker = speaker_store.get_mut(*entity).unwrap();
 
     let headshot = rltk::Rect::with_size(2, 2, 11, 11);
     draw_box(ctx, headshot, RGB::named(rltk::WHITE));
@@ -507,18 +516,44 @@ pub fn draw_talk_panel(gs: &mut State, ctx: &mut Rltk) -> RunState {
 
     ctx.set(0, 14, RGB::named(rltk::WHITE), RGB::named(rltk::BLACK), 195);
     ctx.set(
-        MAP_WIDTH - 1,
+        TALK_PANEL_WIDTH - 1,
         14,
         RGB::named(rltk::WHITE),
         RGB::named(rltk::BLACK),
         180,
     );
 
-    for x in 1..MAP_WIDTH - 1 {
+    for x in 1..TALK_PANEL_WIDTH - 1 {
         ctx.set(x, 14, RGB::named(rltk::WHITE), RGB::named(rltk::BLACK), 196);
     }
 
-    let ai = gs.ecs.fetch::<ConversationAI>();
+    ctx.set(
+        0,
+        TALK_PANEL_HEIGHT - 3,
+        RGB::named(rltk::WHITE),
+        RGB::named(rltk::BLACK),
+        195,
+    );
+    ctx.set(
+        TALK_PANEL_WIDTH - 1,
+        TALK_PANEL_HEIGHT - 3,
+        RGB::named(rltk::WHITE),
+        RGB::named(rltk::BLACK),
+        180,
+    );
+
+    for x in 1..TALK_PANEL_WIDTH - 1 {
+        ctx.set(
+            x,
+            TALK_PANEL_HEIGHT - 3,
+            RGB::named(rltk::WHITE),
+            RGB::named(rltk::BLACK),
+            196,
+        );
+    }
+
+    let mut ai_store = gs.ecs.write_storage::<ConversationAI>();
+    let mut ai = ai_store.get_mut(*entity).unwrap();
     let options = generate_conversation_options(&speaker, *ai);
 
     let mut y = 16;
@@ -535,10 +570,10 @@ pub fn draw_talk_panel(gs: &mut State, ctx: &mut Rltk) -> RunState {
 
     ctx.print_color(
         1,
-        MAP_HEIGHT - 2,
+        TALK_PANEL_HEIGHT - 2,
         RGB::named(rltk::WHITE),
         RGB::named(rltk::BLACK),
-        "Press [Esc] to leave the conversation.",
+        "Use [0-9] to talk to the suspect. Press [Esc] to leave the conversation.",
     );
 
     let mut idx: Option<usize> = None;
@@ -596,6 +631,117 @@ fn generate_conversation_options(speaker: &Suspect, ai: ConversationAI) -> Vec<(
     options
 }
 
+pub fn draw_examination_panel(gs: &mut State, ctx: &mut Rltk) -> RunState {
+    let rect = rltk::Rect::with_size(0, 0, EXAM_PANEL_WIDTH, EXAM_PANEL_HEIGHT);
+    draw_box(ctx, rect, RGB::named(rltk::WHITE));
+
+    let entity = gs.ecs.read_resource::<Entity>();
+
+    let mut clue_store = gs.ecs.write_storage::<Clue>();
+    let clue = clue_store.get_mut(*entity).unwrap();
+
+    ctx.print_color(
+        2,
+        2,
+        RGB::named(rltk::WHITE),
+        RGB::named(rltk::BLACK),
+        "Examining:",
+    );
+
+    display_clue(ctx, clue);
+
+    ctx.print_color(
+        13,
+        2,
+        clue.color,
+        RGB::named(rltk::BLACK),
+        &clue.name.to_uppercase(),
+    );
+
+    ctx.print_color(
+        1,
+        EXAM_PANEL_HEIGHT - 2,
+        RGB::named(rltk::WHITE),
+        RGB::named(rltk::BLACK),
+        "Use your mouse to examine the object. Press [Esc] to finish your examination.",
+    );
+
+    ctx.set(
+        0,
+        EXAM_PANEL_HEIGHT - 3,
+        RGB::named(rltk::WHITE),
+        RGB::named(rltk::BLACK),
+        195,
+    );
+    ctx.set(
+        EXAM_PANEL_WIDTH - 1,
+        EXAM_PANEL_HEIGHT - 3,
+        RGB::named(rltk::WHITE),
+        RGB::named(rltk::BLACK),
+        180,
+    );
+
+    for x in 1..EXAM_PANEL_WIDTH - 1 {
+        ctx.set(
+            x,
+            EXAM_PANEL_HEIGHT - 3,
+            RGB::named(rltk::WHITE),
+            RGB::named(rltk::BLACK),
+            196,
+        );
+    }
+
+    let (mouse_x, mouse_y) = ctx.mouse_pos();
+    for marker in clue.markers.clone() {
+        if (mouse_x - marker.0).abs() <= 1 && (mouse_y - marker.1).abs() <= 1 {
+            ctx.set(
+                marker.0,
+                marker.1,
+                RGB::named(rltk::WHITE),
+                RGB::named(rltk::BLACK),
+                rltk::to_cp437('*'),
+            );
+            if ctx.left_click {
+                let msg = Message::new(
+                    gs.ecs.fetch::<Time>().get_day_and_time().as_str(),
+                    "You",
+                    marker.2.as_str(),
+                    RGB::named(rltk::WHITE),
+                );
+                let mut log = gs.ecs.write_resource::<Log>();
+                log.log.insert(0, msg);
+            }
+        }
+    }
+
+    match ctx.key {
+        None => {}
+        Some(key) => match key {
+            VirtualKeyCode::Escape => {
+                return RunState::AwaitingInput;
+            }
+            _ => {}
+        },
+    }
+
+    RunState::Examining
+}
+
+fn display_clue(ctx: &mut Rltk, clue: &Clue) {
+    let display = clue.display.clone();
+    let mut y = EXAM_PANEL_HEIGHT / 2 - display.len() as i32 / 2;
+    for row in display {
+        ctx.print_color(
+            EXAM_PANEL_WIDTH / 2 - row.len() as i32 / 2,
+            y,
+            clue.color,
+            RGB::named(rltk::BLACK),
+            &row,
+        );
+        y += 1;
+    }
+}
+
 pub enum ViewLogResult {
     None(usize),
     Up(usize),
@@ -639,7 +785,7 @@ pub fn view_log(gs: &State, ctx: &mut Rltk, page: usize) -> ViewLogResult {
         SCREEN_HEIGHT - 2,
         RGB::named(rltk::WHITE),
         RGB::named(rltk::BLACK),
-        "Press [Esc] to leave. Use [Up] and [Down] to scroll.",
+        "Use [Up] and [Down] to scroll. Press [Esc] to leave.",
     );
 
     match ctx.key {

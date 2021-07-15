@@ -2,7 +2,10 @@ use rltk::RGB;
 use specs::prelude::*;
 use specs_derive::Component;
 
-use crate::gui::Options;
+use crate::{
+    gui::Options,
+    story::{Clue, Suspect},
+};
 
 #[derive(Component)]
 pub struct Position {
@@ -23,7 +26,7 @@ pub struct PlayerPosition {
     pub y: i32,
 }
 
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Clone, Copy, Default)]
 pub struct ConversationAI {
     pub innocent: bool,
 }
@@ -32,20 +35,53 @@ pub struct ConversationChecker {}
 
 impl<'a> System<'a> for ConversationChecker {
     type SystemData = (
+        Entities<'a>,
+        ReadStorage<'a, Suspect>,
         ReadStorage<'a, ConversationAI>,
         ReadStorage<'a, Position>,
         ReadExpect<'a, PlayerPosition>,
         WriteExpect<'a, Options>,
+        WriteExpect<'a, Entity>,
     );
 
     fn run(&mut self, data: Self::SystemData) {
-        let (conversables, positions, player_pos, mut options) = data;
+        let (entities, suspects, conversables, positions, player_pos, mut options, mut entity) =
+            data;
 
         options.remove_option('T');
 
-        for (pos, _conversation) in (&positions, &conversables).join() {
+        for (ent, _suspect, pos, _conversation) in
+            (&entities, &suspects, &positions, &conversables).join()
+        {
             if (pos.x - player_pos.x).abs() <= 1 && (pos.y - player_pos.y).abs() <= 1 {
                 options.add_option('T', "Talk");
+                *entity = ent;
+            }
+        }
+    }
+}
+
+pub struct ExaminationChecker {}
+
+impl<'a> System<'a> for ExaminationChecker {
+    type SystemData = (
+        Entities<'a>,
+        ReadStorage<'a, Clue>,
+        ReadStorage<'a, Position>,
+        ReadExpect<'a, PlayerPosition>,
+        WriteExpect<'a, Options>,
+        WriteExpect<'a, Entity>,
+    );
+
+    fn run(&mut self, data: Self::SystemData) {
+        let (entities, clues, positions, player_pos, mut options, mut entity) = data;
+
+        options.remove_option('X');
+
+        for (ent, _clue, pos) in (&entities, &clues, &positions).join() {
+            if (pos.x - player_pos.x).abs() <= 1 && (pos.y - player_pos.y).abs() <= 1 {
+                options.add_option('X', "Examine");
+                *entity = ent;
             }
         }
     }

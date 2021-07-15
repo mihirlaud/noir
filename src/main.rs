@@ -10,8 +10,8 @@ use std::collections::BTreeMap;
 use components::*;
 use constants::*;
 use gui::{
-    draw_log, draw_sidebar, draw_talk_panel, view_log, GameOverResult, MainMenuSelection,
-    PauseMenuSelection,
+    draw_examination_panel, draw_log, draw_sidebar, draw_talk_panel, view_log, GameOverResult,
+    MainMenuSelection, PauseMenuSelection,
 };
 use rltk::{Console, GameState, Rltk, RGB};
 use specs::prelude::*;
@@ -19,7 +19,7 @@ use specs::prelude::*;
 use crate::{
     gui::{log_message, Log, Options, Time},
     map::Map,
-    story::{Story, Suspect},
+    story::{Clue, Story, Suspect},
 };
 
 #[derive(PartialEq, Clone, Copy)]
@@ -27,6 +27,7 @@ pub enum RunState {
     MainMenu { selection: MainMenuSelection },
     AwaitingInput,
     Talking,
+    Examining,
     Log { page: usize },
     Paused { selection: PauseMenuSelection },
     GameOver { result: GameOverResult },
@@ -40,6 +41,8 @@ impl State {
     fn run_systems(&mut self) {
         let mut conversation_checker = ConversationChecker {};
         conversation_checker.run_now(&self.ecs);
+        let mut examination_checker = ExaminationChecker {};
+        examination_checker.run_now(&self.ecs);
         self.ecs.maintain();
     }
 
@@ -50,6 +53,7 @@ impl State {
         self.ecs.register::<Renderable>();
         self.ecs.register::<ConversationAI>();
         self.ecs.register::<Suspect>();
+        self.ecs.register::<Clue>();
 
         self.ecs.insert(RunState::MainMenu {
             selection: MainMenuSelection::Play,
@@ -73,6 +77,9 @@ impl State {
 
         let time = Time::new();
         self.ecs.insert(time);
+
+        let entity = self.ecs.create_entity().build();
+        self.ecs.insert(entity);
 
         log_message(
             self,
@@ -112,6 +119,10 @@ impl GameState for State {
             RunState::MainMenu { .. } => {}
             RunState::GameOver { .. } => {}
             RunState::Talking => {
+                draw_log(self, ctx);
+                draw_sidebar(self, ctx);
+            }
+            RunState::Examining => {
                 draw_log(self, ctx);
                 draw_sidebar(self, ctx);
             }
@@ -172,6 +183,9 @@ impl GameState for State {
             }
             RunState::Talking => {
                 newrunstate = draw_talk_panel(self, ctx);
+            }
+            RunState::Examining => {
+                newrunstate = draw_examination_panel(self, ctx);
             }
             RunState::Log { page } => {
                 let result = view_log(self, ctx, page);

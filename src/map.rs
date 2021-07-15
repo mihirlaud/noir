@@ -21,7 +21,7 @@ impl Map {
                 .with(Position { x, y: 10 })
                 .with(Renderable {
                     glyph: rltk::to_cp437(suspect.name.chars().nth(0).unwrap()),
-                    fg: RGB::named(rltk::YELLOW),
+                    fg: suspect.color,
                     bg: rltk::RGB::named(rltk::BLACK),
                 })
                 .with(suspect.clone())
@@ -33,18 +33,40 @@ impl Map {
             x += 5;
         }
 
-        let tiles = vec![Tile::Floor; (MAP_WIDTH * MAP_HEIGHT) as usize];
+        x = 5;
+        for clue in story.clues.iter() {
+            gs.ecs
+                .create_entity()
+                .with(Position { x, y: 14 })
+                .with(Renderable {
+                    glyph: rltk::to_cp437(clue.name.chars().nth(0).unwrap()),
+                    fg: clue.color,
+                    bg: rltk::RGB::named(rltk::BLACK),
+                })
+                .with(clue.clone())
+                .build();
+
+            x += 5;
+        }
+
+        let tiles = vec![Tile::Empty; (MAP_WIDTH * MAP_HEIGHT) as usize];
 
         let mut map = Map { tiles };
 
-        for x in 0..MAP_WIDTH {
+        for x in 0..MAP_WIDTH / 2 {
             map.set_tile(x, 0, Tile::Wall);
-            map.set_tile(x, MAP_HEIGHT - 1, Tile::Wall);
+            map.set_tile(x, MAP_HEIGHT / 2 - 1, Tile::Wall);
         }
 
-        for y in 0..MAP_HEIGHT {
+        for y in 0..MAP_HEIGHT / 2 {
             map.set_tile(0, y, Tile::Wall);
-            map.set_tile(MAP_WIDTH - 1, y, Tile::Wall);
+            map.set_tile(MAP_WIDTH / 2 - 1, y, Tile::Wall);
+        }
+
+        for y in 1..MAP_HEIGHT / 2 - 1 {
+            for x in 1..MAP_WIDTH / 2 - 1 {
+                map.set_tile(x, y, Tile::Floor);
+            }
         }
 
         map
@@ -65,6 +87,7 @@ impl Map {
                         match self.get_tile(x, y) {
                             Tile::Floor => rltk::to_cp437('.'),
                             Tile::Wall => rltk::to_cp437('#'),
+                            Tile::Empty => rltk::to_cp437(' '),
                         },
                     );
                 }
@@ -85,4 +108,5 @@ impl Map {
 pub enum Tile {
     Wall,
     Floor,
+    Empty,
 }
