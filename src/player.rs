@@ -1,10 +1,6 @@
 use crate::components::*;
-use crate::gui;
-use crate::gui::Log;
-use crate::gui::Message;
 use crate::gui::Options;
 use crate::gui::PauseMenuSelection;
-use crate::gui::Time;
 use crate::map::Map;
 use crate::map::Tile;
 use crate::story::Story;

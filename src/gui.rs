@@ -25,27 +25,36 @@ pub enum MainMenuResult {
 pub fn main_menu(gs: &mut State, ctx: &mut Rltk) -> MainMenuResult {
     let runstate = gs.ecs.fetch::<RunState>();
 
-    ctx.print_color(
-        0,
-        0,
-        RGB::named(rltk::WHITE),
-        RGB::named(rltk::BLACK),
-        "Noir",
-    );
+    let title = vec![
+        "b.             8      ,o888888o.       8 8888   8 888888888o.   ".to_string(),
+        "888o.          8   . 8888     `88.     8 8888   8 8888    `88.  ".to_string(),
+        "Y88888o.       8  ,8 8888       `8b    8 8888   8 8888     `88  ".to_string(),
+        ".`Y888888o.    8  88 8888        `8b   8 8888   8 8888     ,88  ".to_string(),
+        "8o. `Y888888o. 8  88 8888         88   8 8888   8 8888.   ,88'  ".to_string(),
+        "8`Y8o. `Y88888o8  88 8888         88   8 8888   8 888888888P'   ".to_string(),
+        "8   `Y8o. `Y8888  88 8888        ,8P   8 8888   8 8888`8b       ".to_string(),
+        "8      `Y8o. `Y8  `8 8888       ,8P    8 8888   8 8888 `8b.     ".to_string(),
+        "8         `Y8o.`   ` 8888     ,88'     8 8888   8 8888   `8b.   ".to_string(),
+        "8            `Yo      `8888888P'       8 8888   8 8888     `88. ".to_string(),
+    ];
+
+    let mut y = SCREEN_HEIGHT / 2 - 5;
+    for row in title {
+        ctx.print_color_centered(y, RGB::named(rltk::WHITE), RGB::named(rltk::BLACK), &row);
+        y += 1;
+    }
 
     if let RunState::MainMenu { selection } = *runstate {
         if selection == MainMenuSelection::Play {
-            ctx.print_color(
-                0,
-                3,
+            ctx.print_color_centered(
+                SCREEN_HEIGHT / 2 + 8,
                 RGB::named(rltk::WHITE),
                 RGB::named(rltk::BLACK),
                 "> Play",
             );
         } else {
-            ctx.print_color(
-                0,
-                3,
+            ctx.print_color_centered(
+                SCREEN_HEIGHT / 2 + 8,
                 RGB::named(rltk::WHITE),
                 RGB::named(rltk::BLACK),
                 "  Play",
@@ -53,17 +62,15 @@ pub fn main_menu(gs: &mut State, ctx: &mut Rltk) -> MainMenuResult {
         }
 
         if selection == MainMenuSelection::Quit {
-            ctx.print_color(
-                0,
-                5,
+            ctx.print_color_centered(
+                SCREEN_HEIGHT / 2 + 10,
                 RGB::named(rltk::WHITE),
                 RGB::named(rltk::BLACK),
                 "> Quit",
             );
         } else {
-            ctx.print_color(
-                0,
-                5,
+            ctx.print_color_centered(
+                SCREEN_HEIGHT / 2 + 10,
                 RGB::named(rltk::WHITE),
                 RGB::named(rltk::BLACK),
                 "  Quit",
@@ -111,17 +118,15 @@ pub enum GameOverResult {
 }
 
 pub fn game_over(ctx: &mut Rltk) -> GameOverResult {
-    ctx.print_color(
-        0,
-        0,
+    ctx.print_color_centered(
+        SCREEN_HEIGHT / 2 - 1,
         RGB::named(rltk::WHITE),
         RGB::named(rltk::BLACK),
         "Thank you for playing.",
     );
 
-    ctx.print_color(
-        0,
-        3,
+    ctx.print_color_centered(
+        SCREEN_HEIGHT / 2 + 1,
         RGB::named(rltk::WHITE),
         RGB::named(rltk::BLACK),
         "Press any key to return to the main menu.",
@@ -184,29 +189,37 @@ impl Options {
 #[derive(PartialEq, Clone)]
 pub struct Time {
     day: i32,
-    time: f32,
+    hour: i32,
+    minute: i32,
 }
 
 impl Time {
     pub fn new() -> Self {
-        Time { day: 1, time: 8.0 }
+        Time {
+            day: 1,
+            hour: 8,
+            minute: 0,
+        }
     }
 
     pub fn increment_day(&mut self) {
         self.day += 1;
     }
 
-    pub fn add_hour(&mut self) {
-        self.time += 1.0;
-        if self.time >= 24.0 {
-            self.time -= 24.0;
-        }
+    pub fn set_time(&mut self, hour: i32, minute: i32) {
+        self.hour = hour;
+        self.minute = minute;
     }
 
-    pub fn add_half_hour(&mut self) {
-        self.time += 0.5;
-        if self.time >= 24.0 {
-            self.time -= 24.0;
+    pub fn advance_hour(&mut self) {
+        self.hour += 1;
+    }
+
+    pub fn advance_minute(&mut self) {
+        self.minute += 1;
+        if self.minute > 59 {
+            self.minute = 0;
+            self.advance_hour();
         }
     }
 
@@ -215,13 +228,17 @@ impl Time {
     }
 
     pub fn get_time(&self) -> String {
-        let hour = if self.time.floor() > 9.0 {
-            format!("{}", self.time.floor() as i32)
+        let hour = if self.hour > 9 {
+            format!("{}", self.hour)
         } else {
-            format!("0{}", self.time.floor() as i32)
+            format!("0{}", self.hour)
         };
 
-        let minute = if self.time.fract() != 0.0 { "30" } else { "00" };
+        let minute = if self.minute > 9 {
+            format!("{}", self.minute)
+        } else {
+            format!("0{}", self.minute)
+        };
 
         format!("{}:{}", hour, minute)
     }
@@ -555,6 +572,9 @@ pub fn draw_talk_panel(gs: &mut State, ctx: &mut Rltk) -> RunState {
         );
         log.log.insert(0, msg1);
         log.log.insert(0, msg2);
+
+        let mut time = gs.ecs.write_resource::<Time>();
+        time.advance_minute();
     }
 
     RunState::Talking
