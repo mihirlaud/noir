@@ -17,9 +17,9 @@ use rltk::{Console, GameState, Rltk, RGB};
 use specs::prelude::*;
 
 use crate::{
-    gui::{Log, Message, Options},
+    gui::{log_message, Log, Options, Time},
     map::Map,
-    story::Story,
+    story::{Story, Suspect},
 };
 
 #[derive(PartialEq, Clone, Copy)]
@@ -49,7 +49,7 @@ impl State {
         self.ecs.register::<Position>();
         self.ecs.register::<Renderable>();
         self.ecs.register::<ConversationAI>();
-        self.ecs.register::<Character>();
+        self.ecs.register::<Suspect>();
 
         self.ecs.insert(RunState::MainMenu {
             selection: MainMenuSelection::Play,
@@ -68,18 +68,24 @@ impl State {
         self.ecs.insert(story);
         self.ecs.insert(map);
 
-        let hello_noir = Message::new("06:00", "Game", "Hello Noir!", RGB::named(rltk::RED));
-        let player_msg = Message::new(
-            "10:00",
-            "You",
-            "How are you today?",
+        let log = Log { log: vec![] };
+        self.ecs.insert(log);
+
+        let time = Time::new();
+        self.ecs.insert(time);
+
+        log_message(
+            self,
+            "Game",
+            "Hello Detective. Welcome to Noir!",
             RGB::named(rltk::WHITE),
         );
-
-        let log = Log {
-            log: vec![player_msg, hello_noir],
-        };
-        self.ecs.insert(log);
+        log_message(
+            self,
+            "Game",
+            "Use arrow keys to move around.",
+            RGB::named(rltk::HOTPINK),
+        );
 
         let mut options = BTreeMap::new();
         options.insert('P', "Pause".to_string());
@@ -106,7 +112,6 @@ impl GameState for State {
             RunState::MainMenu { .. } => {}
             RunState::GameOver { .. } => {}
             RunState::Talking => {
-                draw_talk_panel(self, ctx);
                 draw_log(self, ctx);
                 draw_sidebar(self, ctx);
             }
@@ -165,7 +170,9 @@ impl GameState for State {
             RunState::AwaitingInput => {
                 newrunstate = player::input(self, ctx);
             }
-            RunState::Talking => {}
+            RunState::Talking => {
+                newrunstate = draw_talk_panel(self, ctx);
+            }
             RunState::Log { page } => {
                 let result = view_log(self, ctx, page);
                 match result {

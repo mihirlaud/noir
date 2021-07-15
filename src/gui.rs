@@ -3,9 +3,12 @@ use std::collections::BTreeMap;
 use super::RunState;
 
 use super::State;
+use crate::components::ConversationAI;
 use crate::constants::*;
+use crate::story::Suspect;
 use rltk::VirtualKeyCode;
 use rltk::{Console, Rltk, RGB};
+use specs::WorldExt;
 
 #[derive(PartialEq, Clone, Copy)]
 pub enum MainMenuSelection {
@@ -178,20 +181,70 @@ impl Options {
     }
 }
 
+#[derive(PartialEq, Clone)]
+pub struct Time {
+    day: i32,
+    time: f32,
+}
+
+impl Time {
+    pub fn new() -> Self {
+        Time { day: 1, time: 8.0 }
+    }
+
+    pub fn increment_day(&mut self) {
+        self.day += 1;
+    }
+
+    pub fn add_hour(&mut self) {
+        self.time += 1.0;
+        if self.time >= 24.0 {
+            self.time -= 24.0;
+        }
+    }
+
+    pub fn add_half_hour(&mut self) {
+        self.time += 0.5;
+        if self.time >= 24.0 {
+            self.time -= 24.0;
+        }
+    }
+
+    pub fn get_day(&self) -> i32 {
+        self.day
+    }
+
+    pub fn get_time(&self) -> String {
+        let hour = if self.time.floor() > 9.0 {
+            format!("{}", self.time.floor() as i32)
+        } else {
+            format!("0{}", self.time.floor() as i32)
+        };
+
+        let minute = if self.time.fract() != 0.0 { "30" } else { "00" };
+
+        format!("{}:{}", hour, minute)
+    }
+
+    pub fn get_day_and_time(&self) -> String {
+        format!("Day {}, {}", self.day, self.get_time())
+    }
+}
+
 pub fn draw_sidebar(gs: &State, ctx: &mut Rltk) {
     let sidebar_box = rltk::Rect::with_size(MAP_WIDTH, 0, SIDEBAR_WIDTH, SIDEBAR_HEIGHT);
     draw_box(ctx, sidebar_box, RGB::named(rltk::WHITE));
 
     ctx.print_color(
         MAP_WIDTH + 1,
-        1,
+        7,
         RGB::named(rltk::WHITE),
         RGB::named(rltk::BLACK),
         "~~ OPTIONS ~~",
     );
 
     let options = gs.ecs.fetch::<Options>().options.clone();
-    let mut y = 3;
+    let mut y = 9;
     for key in options.keys() {
         ctx.print_color(
             MAP_WIDTH + 1,
@@ -205,6 +258,27 @@ pub fn draw_sidebar(gs: &State, ctx: &mut Rltk) {
             break;
         }
     }
+
+    let time_box = rltk::Rect::with_size(MAP_WIDTH + 4, 3, 7, 3);
+    draw_box(ctx, time_box, RGB::named(rltk::WHITE));
+
+    let time = gs.ecs.fetch::<Time>();
+
+    ctx.print_color(
+        MAP_WIDTH + 5,
+        2,
+        RGB::named(rltk::WHITE),
+        RGB::named(rltk::BLACK),
+        &format!("DAY {}", time.get_day()),
+    );
+
+    ctx.print_color(
+        MAP_WIDTH + 5,
+        4,
+        RGB::named(rltk::WHITE),
+        RGB::named(rltk::BLACK),
+        &time.get_time(),
+    );
 }
 
 #[derive(PartialEq, Clone)]
@@ -260,14 +334,22 @@ pub fn draw_log(gs: &State, ctx: &mut Rltk) {
             RGB::named(rltk::BLACK),
             msg.to_string().as_str(),
         );
-        y -= 1;
+        y -= 2;
         if y < MAP_HEIGHT + 2 {
             break;
         }
     }
 }
 
-pub fn log_message(gs: &mut State, msg: Message) {
+pub fn log_message(gs: &mut State, speaker: &str, content: &str, color: RGB) {
+    let timestamp;
+    {
+        let time = gs.ecs.fetch::<Time>();
+        timestamp = time.get_day_and_time();
+    }
+
+    let msg = Message::new(timestamp.as_str(), speaker, content, color);
+
     let mut log = gs.ecs.fetch::<Log>().log.clone();
     log.insert(0, msg);
     let log = Log { log };
@@ -373,9 +455,125 @@ pub fn pause_menu(gs: &mut State, ctx: &mut Rltk) -> PauseMenuResult {
     }
 }
 
-pub fn draw_talk_panel(gs: &State, ctx: &mut Rltk) {
+pub fn draw_talk_panel(gs: &mut State, ctx: &mut Rltk) -> RunState {
     let rect = rltk::Rect::with_size(0, 0, TALK_PANEL_WIDTH, TALK_PANEL_HEIGHT);
     draw_box(ctx, rect, RGB::named(rltk::WHITE));
+
+    let speaker = gs.ecs.fetch::<Suspect>();
+
+    let headshot = rltk::Rect::with_size(2, 2, 11, 11);
+    draw_box(ctx, headshot, RGB::named(rltk::WHITE));
+
+    ctx.print_color(
+        14,
+        3,
+        RGB::named(rltk::WHITE),
+        RGB::named(rltk::BLACK),
+        "Name:",
+    );
+    ctx.print_color(20, 3, speaker.color, RGB::named(rltk::BLACK), &speaker.name);
+
+    ctx.print_color(
+        14,
+        6,
+        RGB::named(rltk::WHITE),
+        RGB::named(rltk::BLACK),
+        "Age:",
+    );
+    ctx.print_color(
+        19,
+        6,
+        speaker.color,
+        RGB::named(rltk::BLACK),
+        &format!("{}", speaker.age),
+    );
+
+    ctx.set(0, 14, RGB::named(rltk::WHITE), RGB::named(rltk::BLACK), 195);
+    ctx.set(
+        MAP_WIDTH - 1,
+        14,
+        RGB::named(rltk::WHITE),
+        RGB::named(rltk::BLACK),
+        180,
+    );
+
+    for x in 1..MAP_WIDTH - 1 {
+        ctx.set(x, 14, RGB::named(rltk::WHITE), RGB::named(rltk::BLACK), 196);
+    }
+
+    let ai = gs.ecs.fetch::<ConversationAI>();
+    let options = generate_conversation_options(&speaker, *ai);
+
+    let mut y = 16;
+    for option in &options {
+        ctx.print_color(
+            2,
+            y,
+            RGB::named(rltk::WHITE),
+            RGB::named(rltk::BLACK),
+            &format!("{}. {}", (y - 14) / 2, option.0),
+        );
+        y += 2;
+    }
+
+    ctx.print_color(
+        1,
+        MAP_HEIGHT - 2,
+        RGB::named(rltk::WHITE),
+        RGB::named(rltk::BLACK),
+        "Press [Esc] to leave the conversation.",
+    );
+
+    let mut idx: Option<usize> = None;
+
+    match ctx.key {
+        None => {}
+        Some(key) => match key {
+            VirtualKeyCode::Key1 => idx = Some(0),
+            VirtualKeyCode::Key2 => idx = Some(1),
+            VirtualKeyCode::Escape => {
+                return RunState::AwaitingInput;
+            }
+            _ => {}
+        },
+    }
+
+    if idx.is_some() {
+        let idx = idx.unwrap();
+        let mut log = gs.ecs.write_resource::<Log>();
+        let msg1 = Message::new(
+            gs.ecs.fetch::<Time>().get_day_and_time().as_str(),
+            "You",
+            options[idx].0.as_str(),
+            RGB::named(rltk::WHITE),
+        );
+        let msg2 = Message::new(
+            gs.ecs.fetch::<Time>().get_day_and_time().as_str(),
+            &speaker.name,
+            options[idx].1.as_str(),
+            speaker.color,
+        );
+        log.log.insert(0, msg1);
+        log.log.insert(0, msg2);
+    }
+
+    RunState::Talking
+}
+
+fn generate_conversation_options(speaker: &Suspect, ai: ConversationAI) -> Vec<(String, String)> {
+    let mut options = vec![];
+
+    options.push((
+        "Hello. What is your name?".to_string(),
+        format!("My name is {}", speaker.name),
+    ));
+
+    options.push((
+        "Are you innocent?".to_string(),
+        format!("I am {}", if ai.innocent { "innocent!" } else { "guilty!" }),
+    ));
+
+    options
 }
 
 pub enum ViewLogResult {
@@ -397,8 +595,10 @@ pub fn view_log(gs: &State, ctx: &mut Rltk, page: usize) -> ViewLogResult {
     );
 
     let log = gs.ecs.fetch::<Log>().log.clone();
-    let mut y = SCREEN_HEIGHT - 4;
-    for i in page * (SCREEN_HEIGHT - 5) as usize..(page + 1) * (SCREEN_HEIGHT - 5) as usize {
+    let mut y = SCREEN_HEIGHT - 5;
+    for i in
+        page * ((SCREEN_HEIGHT - 5) / 2) as usize..(page + 1) * ((SCREEN_HEIGHT - 5) / 2) as usize
+    {
         if log.get(i).is_some() {
             let msg = log[i].clone();
             ctx.print_color(
@@ -408,7 +608,7 @@ pub fn view_log(gs: &State, ctx: &mut Rltk, page: usize) -> ViewLogResult {
                 RGB::named(rltk::BLACK),
                 msg.to_string().as_str(),
             );
-            y -= 1;
+            y -= 2;
         } else {
             break;
         }
@@ -425,13 +625,13 @@ pub fn view_log(gs: &State, ctx: &mut Rltk, page: usize) -> ViewLogResult {
     match ctx.key {
         None => ViewLogResult::None(page),
         Some(key) => match key {
-            VirtualKeyCode::Up => {
-                ViewLogResult::Up(if log.len() > (page + 1) * (SCREEN_HEIGHT - 5) as usize {
+            VirtualKeyCode::Up => ViewLogResult::Up(
+                if log.len() > (page + 1) * ((SCREEN_HEIGHT - 5) / 2) as usize {
                     page + 1
                 } else {
                     page
-                })
-            }
+                },
+            ),
             VirtualKeyCode::Down => ViewLogResult::Down(if page > 0 { page - 1 } else { page }),
             VirtualKeyCode::Escape => ViewLogResult::Exit,
             _ => ViewLogResult::None(page),

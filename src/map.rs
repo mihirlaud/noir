@@ -16,22 +16,15 @@ impl Map {
     pub fn from_story(story: &Story, gs: &mut State) -> Self {
         let mut x = 5;
         for suspect in story.suspects.iter() {
-            rltk::console::log(&format!("{}", suspect.name));
             gs.ecs
                 .create_entity()
                 .with(Position { x, y: 10 })
                 .with(Renderable {
                     glyph: rltk::to_cp437(suspect.name.chars().nth(0).unwrap()),
-                    fg: if suspect.is_killer {
-                        rltk::RGB::named(rltk::RED)
-                    } else {
-                        rltk::RGB::named(rltk::YELLOW)
-                    },
+                    fg: RGB::named(rltk::YELLOW),
                     bg: rltk::RGB::named(rltk::BLACK),
                 })
-                .with(Character {
-                    name: suspect.name.clone(),
-                })
+                .with(suspect.clone())
                 .with(ConversationAI {
                     innocent: !suspect.is_killer,
                 })

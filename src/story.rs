@@ -1,4 +1,6 @@
-use rltk::RandomNumberGenerator;
+use rltk::{RandomNumberGenerator, RGB};
+use specs::prelude::*;
+use specs_derive::Component;
 
 #[derive(Debug)]
 pub struct Story {
@@ -58,10 +60,11 @@ impl Victim {
     }
 }
 
-#[derive(Debug)]
+#[derive(Component, Debug, Clone)]
 pub struct Suspect {
     pub name: String,
     pub age: i32,
+    pub color: RGB,
     pub is_killer: bool,
     pub hair_color: String,
     pub shoe_size: String,
@@ -94,6 +97,7 @@ impl Suspect {
         Suspect {
             name,
             age,
+            color: RGB::named(rltk::YELLOW),
             is_killer,
             hair_color,
             shoe_size,

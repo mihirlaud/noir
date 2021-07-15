@@ -23,7 +23,7 @@ pub struct PlayerPosition {
     pub y: i32,
 }
 
-#[derive(Component)]
+#[derive(Component, Clone, Copy)]
 pub struct ConversationAI {
     pub innocent: bool,
 }
@@ -49,9 +49,4 @@ impl<'a> System<'a> for ConversationChecker {
             }
         }
     }
-}
-
-#[derive(Component)]
-pub struct Character {
-    pub name: String,
 }
