@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use rltk::{RandomNumberGenerator, RGB};
 use specs::prelude::*;
 use specs_derive::Component;
@@ -121,14 +123,52 @@ impl Suspect {
     }
 }
 
+#[derive(Component, Debug, PartialEq, Eq, Hash, Clone)]
+pub struct Note {
+    pub note: Vec<(String, (u8, u8, u8))>,
+}
+
+impl Note {
+    pub fn new(note: Vec<(String, (u8, u8, u8))>) -> Self {
+        Note { note }
+    }
+
+    pub fn get_log_msg(&self) -> String {
+        let mut log_msg = String::new();
+
+        for pair in self.note.clone() {
+            log_msg.push_str(&pair.0);
+            log_msg.push_str(" ");
+        }
+
+        log_msg
+    }
+}
+
+#[derive(Component, Debug, PartialEq, Clone)]
+pub struct PlayerNotes {
+    pub notes: HashSet<Note>,
+}
+
+impl PlayerNotes {
+    pub fn new() -> Self {
+        PlayerNotes {
+            notes: HashSet::new(),
+        }
+    }
+
+    pub fn add_note(&mut self, note: Note) {
+        self.notes.insert(note);
+    }
+}
+
 #[derive(Component, Clone, Debug)]
 pub struct Clue {
     pub name: String,
     pub color: RGB,
     pub is_murder_weapon: bool,
     pub display: Vec<String>,
-    pub tags: Vec<String>,
-    pub markers: Vec<(i32, i32, String)>,
+    pub markers: Vec<(i32, i32, Note, bool)>,
 }
 
 impl Clue {
@@ -185,9 +225,22 @@ impl Clue {
             _ => vec!["".to_string()],
         };
 
+        let color = if is_murder_weapon {
+            rltk::PURPLE
+        } else {
+            rltk::LIMEGREEN
+        };
+
         let tags = vec![
-            "Killer left a partial fingerprint.".to_string(),
-            "Killer's hair is on the weapon.".to_string(),
+            Note::new(vec![
+                ("Killer left a".to_string(), rltk::WHITE),
+                ("partial fingerprint".to_string(), color),
+            ]),
+            Note::new(vec![
+                ("Killer's".to_string(), rltk::WHITE),
+                ("hair".to_string(), color),
+                ("is on the weapon".to_string(), rltk::WHITE),
+            ]),
         ];
 
         let mut markers = vec![];
@@ -204,7 +257,7 @@ impl Clue {
 
                 let mut available = true;
 
-                for (marker_x, marker_y, _) in markers.clone() {
+                for (marker_x, marker_y, _, _) in markers.clone() {
                     let marker_x: i32 = marker_x;
                     let marker_y: i32 = marker_y;
                     if (x - marker_x).abs() <= 2 && (y - marker_y).abs() <= 2 {
@@ -214,7 +267,7 @@ impl Clue {
                 }
 
                 if available {
-                    markers.push((x, y, tag));
+                    markers.push((x, y, tag, false));
                     break;
                 }
             }
@@ -222,14 +275,9 @@ impl Clue {
 
         Clue {
             name,
-            color: if is_murder_weapon {
-                RGB::named(rltk::PURPLE)
-            } else {
-                RGB::named(rltk::LIMEGREEN)
-            },
+            color: RGB::named(color),
             is_murder_weapon,
             display,
-            tags,
             markers,
         }
     }
@@ -242,5 +290,11 @@ impl Clue {
         }
 
         clues
+    }
+
+    pub fn reveal_marker(&mut self, idx: usize) {
+        let mut marker = self.markers.remove(idx);
+        marker.3 = true;
+        self.markers.insert(idx, marker);
     }
 }

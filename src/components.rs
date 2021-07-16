@@ -31,6 +31,11 @@ pub struct ConversationAI {
     pub innocent: bool,
 }
 
+#[derive(Component, Clone, Copy)]
+pub struct TalkEntity {
+    pub entity: Entity,
+}
+
 pub struct ConversationChecker {}
 
 impl<'a> System<'a> for ConversationChecker {
@@ -41,12 +46,11 @@ impl<'a> System<'a> for ConversationChecker {
         ReadStorage<'a, Position>,
         ReadExpect<'a, PlayerPosition>,
         WriteExpect<'a, Options>,
-        WriteExpect<'a, Entity>,
+        WriteExpect<'a, TalkEntity>,
     );
 
     fn run(&mut self, data: Self::SystemData) {
-        let (entities, suspects, conversables, positions, player_pos, mut options, mut entity) =
-            data;
+        let (entities, suspects, conversables, positions, player_pos, mut options, mut talk) = data;
 
         options.remove_option('T');
 
@@ -55,10 +59,15 @@ impl<'a> System<'a> for ConversationChecker {
         {
             if (pos.x - player_pos.x).abs() <= 1 && (pos.y - player_pos.y).abs() <= 1 {
                 options.add_option('T', "Talk");
-                *entity = ent;
+                (*talk).entity = ent;
             }
         }
     }
+}
+
+#[derive(Component, Clone, Copy)]
+pub struct ExamEntity {
+    pub entity: Entity,
 }
 
 pub struct ExaminationChecker {}
@@ -70,18 +79,18 @@ impl<'a> System<'a> for ExaminationChecker {
         ReadStorage<'a, Position>,
         ReadExpect<'a, PlayerPosition>,
         WriteExpect<'a, Options>,
-        WriteExpect<'a, Entity>,
+        WriteExpect<'a, ExamEntity>,
     );
 
     fn run(&mut self, data: Self::SystemData) {
-        let (entities, clues, positions, player_pos, mut options, mut entity) = data;
+        let (entities, clues, positions, player_pos, mut options, mut exam) = data;
 
         options.remove_option('X');
 
         for (ent, _clue, pos) in (&entities, &clues, &positions).join() {
             if (pos.x - player_pos.x).abs() <= 1 && (pos.y - player_pos.y).abs() <= 1 {
                 options.add_option('X', "Examine");
-                *entity = ent;
+                (*exam).entity = ent;
             }
         }
     }

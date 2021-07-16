@@ -43,6 +43,11 @@ pub fn input(gs: &mut State, ctx: &mut Rltk) -> RunState {
             VirtualKeyCode::Right => try_move_player(1, 0, &mut gs.ecs),
             VirtualKeyCode::Up => try_move_player(0, -1, &mut gs.ecs),
             VirtualKeyCode::Down => try_move_player(0, 1, &mut gs.ecs),
+            VirtualKeyCode::N => {
+                if gs.ecs.fetch::<Options>().options.contains_key(&'N') {
+                    return RunState::Notes;
+                }
+            }
             VirtualKeyCode::P => {
                 if gs.ecs.fetch::<Options>().options.contains_key(&'P') {
                     return RunState::Paused {

@@ -4,8 +4,11 @@ use super::RunState;
 
 use super::State;
 use crate::components::ConversationAI;
+use crate::components::ExamEntity;
+use crate::components::TalkEntity;
 use crate::constants::*;
 use crate::story::Clue;
+use crate::story::PlayerNotes;
 use crate::story::Suspect;
 use rltk::VirtualKeyCode;
 use rltk::{Console, Rltk, RGB};
@@ -309,6 +312,16 @@ pub struct Log {
     pub log: Vec<Message>,
 }
 
+impl Log {
+    pub fn log_message(&mut self, time: &Time, speaker: &str, content: &str, color: RGB) {
+        let timestamp = time.get_day_and_time();
+
+        let msg = Message::new(timestamp.as_str(), speaker, content, color);
+
+        self.log.insert(0, msg);
+    }
+}
+
 #[derive(PartialEq, Clone)]
 pub struct Message {
     timestamp: String,
@@ -362,21 +375,6 @@ pub fn draw_log(gs: &State, ctx: &mut Rltk) {
             break;
         }
     }
-}
-
-pub fn log_message(gs: &mut State, speaker: &str, content: &str, color: RGB) {
-    let timestamp;
-    {
-        let time = gs.ecs.fetch::<Time>();
-        timestamp = time.get_day_and_time();
-    }
-
-    let msg = Message::new(timestamp.as_str(), speaker, content, color);
-
-    let mut log = gs.ecs.fetch::<Log>().log.clone();
-    log.insert(0, msg);
-    let log = Log { log };
-    gs.ecs.insert(log);
 }
 
 #[derive(PartialEq, Clone, Copy)]
@@ -482,10 +480,11 @@ pub fn draw_talk_panel(gs: &mut State, ctx: &mut Rltk) -> RunState {
     let rect = rltk::Rect::with_size(0, 0, TALK_PANEL_WIDTH, TALK_PANEL_HEIGHT);
     draw_box(ctx, rect, RGB::named(rltk::WHITE));
 
-    let entity = gs.ecs.read_resource::<Entity>();
+    let entity = gs.ecs.read_resource::<TalkEntity>();
+    let entity = (*entity).entity;
 
     let mut speaker_store = gs.ecs.write_storage::<Suspect>();
-    let mut speaker = speaker_store.get_mut(*entity).unwrap();
+    let mut speaker = speaker_store.get_mut(entity).unwrap();
 
     let headshot = rltk::Rect::with_size(2, 2, 11, 11);
     draw_box(ctx, headshot, RGB::named(rltk::WHITE));
@@ -553,7 +552,7 @@ pub fn draw_talk_panel(gs: &mut State, ctx: &mut Rltk) -> RunState {
     }
 
     let mut ai_store = gs.ecs.write_storage::<ConversationAI>();
-    let mut ai = ai_store.get_mut(*entity).unwrap();
+    let mut ai = ai_store.get_mut(entity).unwrap();
     let options = generate_conversation_options(&speaker, *ai);
 
     let mut y = 16;
@@ -592,23 +591,16 @@ pub fn draw_talk_panel(gs: &mut State, ctx: &mut Rltk) -> RunState {
 
     if idx.is_some() {
         let idx = idx.unwrap();
+        let mut time = gs.ecs.write_resource::<Time>();
         let mut log = gs.ecs.write_resource::<Log>();
-        let msg1 = Message::new(
-            gs.ecs.fetch::<Time>().get_day_and_time().as_str(),
+        log.log_message(
+            &time,
             "You",
             options[idx].0.as_str(),
             RGB::named(rltk::WHITE),
         );
-        let msg2 = Message::new(
-            gs.ecs.fetch::<Time>().get_day_and_time().as_str(),
-            &speaker.name,
-            options[idx].1.as_str(),
-            speaker.color,
-        );
-        log.log.insert(0, msg1);
-        log.log.insert(0, msg2);
+        log.log_message(&time, &speaker.name, options[idx].1.as_str(), speaker.color);
 
-        let mut time = gs.ecs.write_resource::<Time>();
         time.advance_minute();
     }
 
@@ -635,24 +627,38 @@ pub fn draw_examination_panel(gs: &mut State, ctx: &mut Rltk) -> RunState {
     let rect = rltk::Rect::with_size(0, 0, EXAM_PANEL_WIDTH, EXAM_PANEL_HEIGHT);
     draw_box(ctx, rect, RGB::named(rltk::WHITE));
 
-    let entity = gs.ecs.read_resource::<Entity>();
+    let entity = gs.ecs.read_resource::<ExamEntity>();
+    let entity = (*entity).entity;
 
     let mut clue_store = gs.ecs.write_storage::<Clue>();
-    let clue = clue_store.get_mut(*entity).unwrap();
+    let clue = clue_store.get_mut(entity).unwrap();
 
     ctx.print_color(
-        2,
-        2,
+        1,
+        1,
         RGB::named(rltk::WHITE),
         RGB::named(rltk::BLACK),
         "Examining:",
     );
 
+    ctx.set(0, 2, RGB::named(rltk::WHITE), RGB::named(rltk::BLACK), 195);
+    ctx.set(
+        EXAM_PANEL_WIDTH - 1,
+        2,
+        RGB::named(rltk::WHITE),
+        RGB::named(rltk::BLACK),
+        180,
+    );
+
+    for x in 1..EXAM_PANEL_WIDTH - 1 {
+        ctx.set(x, 2, RGB::named(rltk::WHITE), RGB::named(rltk::BLACK), 196);
+    }
+
     display_clue(ctx, clue);
 
     ctx.print_color(
-        13,
-        2,
+        12,
+        1,
         clue.color,
         RGB::named(rltk::BLACK),
         &clue.name.to_uppercase(),
@@ -692,7 +698,8 @@ pub fn draw_examination_panel(gs: &mut State, ctx: &mut Rltk) -> RunState {
     }
 
     let (mouse_x, mouse_y) = ctx.mouse_pos();
-    for marker in clue.markers.clone() {
+    for i in 0..clue.markers.len() {
+        let marker = clue.markers[i].clone();
         if (mouse_x - marker.0).abs() <= 1 && (mouse_y - marker.1).abs() <= 1 {
             ctx.set(
                 marker.0,
@@ -702,14 +709,21 @@ pub fn draw_examination_panel(gs: &mut State, ctx: &mut Rltk) -> RunState {
                 rltk::to_cp437('*'),
             );
             if ctx.left_click {
-                let msg = Message::new(
-                    gs.ecs.fetch::<Time>().get_day_and_time().as_str(),
+                let mut time = gs.ecs.write_resource::<Time>();
+                let mut log = gs.ecs.write_resource::<Log>();
+                log.log_message(
+                    &time,
                     "You",
-                    marker.2.as_str(),
+                    marker.2.get_log_msg().as_str(),
                     RGB::named(rltk::WHITE),
                 );
-                let mut log = gs.ecs.write_resource::<Log>();
-                log.log.insert(0, msg);
+
+                clue.reveal_marker(i);
+
+                let mut notes = gs.ecs.write_resource::<PlayerNotes>();
+                notes.add_note(marker.2.clone());
+
+                time.advance_minute();
             }
         }
     }
@@ -739,6 +753,18 @@ fn display_clue(ctx: &mut Rltk, clue: &Clue) {
             &row,
         );
         y += 1;
+    }
+
+    for marker in clue.markers.clone() {
+        if marker.3 {
+            ctx.set(
+                marker.0,
+                marker.1,
+                RGB::named(rltk::WHITE),
+                RGB::named(rltk::BLACK),
+                rltk::to_cp437('*'),
+            );
+        }
     }
 }
 
@@ -788,6 +814,31 @@ pub fn view_log(gs: &State, ctx: &mut Rltk, page: usize) -> ViewLogResult {
         "Use [Up] and [Down] to scroll. Press [Esc] to leave.",
     );
 
+    ctx.set(
+        0,
+        SCREEN_HEIGHT - 3,
+        RGB::named(rltk::WHITE),
+        RGB::named(rltk::BLACK),
+        195,
+    );
+    ctx.set(
+        SCREEN_WIDTH - 1,
+        SCREEN_HEIGHT - 3,
+        RGB::named(rltk::WHITE),
+        RGB::named(rltk::BLACK),
+        180,
+    );
+
+    for x in 1..SCREEN_WIDTH - 1 {
+        ctx.set(
+            x,
+            SCREEN_HEIGHT - 3,
+            RGB::named(rltk::WHITE),
+            RGB::named(rltk::BLACK),
+            196,
+        );
+    }
+
     match ctx.key {
         None => ViewLogResult::None(page),
         Some(key) => match key {
@@ -803,4 +854,94 @@ pub fn view_log(gs: &State, ctx: &mut Rltk, page: usize) -> ViewLogResult {
             _ => ViewLogResult::None(page),
         },
     }
+}
+
+pub fn draw_notes(gs: &mut State, ctx: &mut Rltk) -> RunState {
+    let rect = rltk::Rect::with_size(0, 0, NOTES_PANEL_WIDTH, NOTES_PANEL_HEIGHT);
+    draw_box(ctx, rect, RGB::named(rltk::WHITE));
+
+    ctx.print_color(
+        1,
+        1,
+        RGB::named(rltk::WHITE),
+        RGB::named(rltk::BLACK),
+        "Notes",
+    );
+
+    ctx.set(0, 2, RGB::named(rltk::WHITE), RGB::named(rltk::BLACK), 195);
+    ctx.set(
+        NOTES_PANEL_WIDTH - 1,
+        2,
+        RGB::named(rltk::WHITE),
+        RGB::named(rltk::BLACK),
+        180,
+    );
+
+    for x in 1..NOTES_PANEL_WIDTH - 1 {
+        ctx.set(x, 2, RGB::named(rltk::WHITE), RGB::named(rltk::BLACK), 196);
+    }
+
+    ctx.print_color(
+        1,
+        NOTES_PANEL_HEIGHT - 2,
+        RGB::named(rltk::WHITE),
+        RGB::named(rltk::BLACK),
+        "Use [Up] and [Down] to scroll through notes. Press [Esc] to leave notes.",
+    );
+
+    ctx.set(
+        0,
+        NOTES_PANEL_HEIGHT - 3,
+        RGB::named(rltk::WHITE),
+        RGB::named(rltk::BLACK),
+        195,
+    );
+    ctx.set(
+        NOTES_PANEL_WIDTH - 1,
+        NOTES_PANEL_HEIGHT - 3,
+        RGB::named(rltk::WHITE),
+        RGB::named(rltk::BLACK),
+        180,
+    );
+
+    for x in 1..NOTES_PANEL_WIDTH - 1 {
+        ctx.set(
+            x,
+            NOTES_PANEL_HEIGHT - 3,
+            RGB::named(rltk::WHITE),
+            RGB::named(rltk::BLACK),
+            196,
+        );
+    }
+
+    let notes = gs.ecs.read_resource::<PlayerNotes>();
+
+    let mut y = 4;
+    for note in notes.notes.iter() {
+        ctx.print_color(2, y, RGB::named(rltk::WHITE), RGB::named(rltk::BLACK), "o");
+        let mut x = 4;
+        for pair in note.note.clone() {
+            ctx.print_color(
+                x,
+                y,
+                RGB::named(pair.1),
+                RGB::named(rltk::BLACK),
+                &format!("{}", pair.0),
+            );
+            x += pair.0.len() as i32 + 1;
+        }
+        y += 2;
+    }
+
+    match ctx.key {
+        None => {}
+        Some(key) => match key {
+            VirtualKeyCode::Escape => {
+                return RunState::AwaitingInput;
+            }
+            _ => {}
+        },
+    }
+
+    RunState::Notes
 }

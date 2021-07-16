@@ -10,16 +10,16 @@ use std::collections::BTreeMap;
 use components::*;
 use constants::*;
 use gui::{
-    draw_examination_panel, draw_log, draw_sidebar, draw_talk_panel, view_log, GameOverResult,
-    MainMenuSelection, PauseMenuSelection,
+    draw_examination_panel, draw_log, draw_notes, draw_sidebar, draw_talk_panel, view_log,
+    GameOverResult, MainMenuSelection, PauseMenuSelection,
 };
 use rltk::{Console, GameState, Rltk, RGB};
 use specs::prelude::*;
 
 use crate::{
-    gui::{log_message, Log, Options, Time},
+    gui::{Log, Options, Time},
     map::Map,
-    story::{Clue, Story, Suspect},
+    story::{Clue, PlayerNotes, Story, Suspect},
 };
 
 #[derive(PartialEq, Clone, Copy)]
@@ -28,6 +28,7 @@ pub enum RunState {
     AwaitingInput,
     Talking,
     Examining,
+    Notes,
     Log { page: usize },
     Paused { selection: PauseMenuSelection },
     GameOver { result: GameOverResult },
@@ -72,31 +73,41 @@ impl State {
         self.ecs.insert(story);
         self.ecs.insert(map);
 
-        let log = Log { log: vec![] };
-        self.ecs.insert(log);
-
         let time = Time::new();
-        self.ecs.insert(time);
 
-        let entity = self.ecs.create_entity().build();
-        self.ecs.insert(entity);
-
-        log_message(
-            self,
+        let mut log = Log { log: vec![] };
+        log.log_message(
+            &time,
             "Game",
             "Hello Detective. Welcome to Noir!",
             RGB::named(rltk::WHITE),
         );
-        log_message(
-            self,
+        log.log_message(
+            &time,
             "Game",
             "Use arrow keys to move around.",
             RGB::named(rltk::HOTPINK),
         );
+        self.ecs.insert(log);
+
+        let notes = PlayerNotes::new();
+        self.ecs.insert(notes);
+
+        self.ecs.insert(time);
+
+        let talk = TalkEntity {
+            entity: self.ecs.create_entity().build(),
+        };
+        self.ecs.insert(talk);
+
+        let exam = ExamEntity {
+            entity: self.ecs.create_entity().build(),
+        };
+        self.ecs.insert(exam);
 
         let mut options = BTreeMap::new();
         options.insert('P', "Pause".to_string());
-        options.insert('I', "Inventory".to_string());
+        options.insert('N', "Notes".to_string());
         options.insert('L', "View Log".to_string());
 
         let options = Options { options };
@@ -123,6 +134,10 @@ impl GameState for State {
                 draw_sidebar(self, ctx);
             }
             RunState::Examining => {
+                draw_log(self, ctx);
+                draw_sidebar(self, ctx);
+            }
+            RunState::Notes => {
                 draw_log(self, ctx);
                 draw_sidebar(self, ctx);
             }
@@ -186,6 +201,9 @@ impl GameState for State {
             }
             RunState::Examining => {
                 newrunstate = draw_examination_panel(self, ctx);
+            }
+            RunState::Notes => {
+                newrunstate = draw_notes(self, ctx);
             }
             RunState::Log { page } => {
                 let result = view_log(self, ctx, page);
