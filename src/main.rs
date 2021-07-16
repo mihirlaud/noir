@@ -17,7 +17,7 @@ use rltk::{Console, GameState, Rltk, RGB};
 use specs::prelude::*;
 
 use crate::{
-    gui::{Log, Options, Time},
+    gui::{Log, NoteBoxes, Options, Time},
     map::Map,
     story::{Clue, PlayerNotes, Story, Suspect},
 };
@@ -72,6 +72,9 @@ impl State {
 
         self.ecs.insert(story);
         self.ecs.insert(map);
+
+        let note_boxes = NoteBoxes::new();
+        self.ecs.insert(note_boxes);
 
         let time = Time::new();
 

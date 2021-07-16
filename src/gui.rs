@@ -1,4 +1,6 @@
+use std::collections::btree_map::Range;
 use std::collections::BTreeMap;
+use std::collections::HashSet;
 
 use super::RunState;
 
@@ -8,11 +10,13 @@ use crate::components::ExamEntity;
 use crate::components::TalkEntity;
 use crate::constants::*;
 use crate::story::Clue;
+use crate::story::Connection;
+use crate::story::ConnectionType;
+use crate::story::Note;
 use crate::story::PlayerNotes;
 use crate::story::Suspect;
 use rltk::VirtualKeyCode;
 use rltk::{Console, Rltk, RGB};
-use specs::Entity;
 use specs::WorldExt;
 
 #[derive(PartialEq, Clone, Copy)]
@@ -856,6 +860,30 @@ pub fn view_log(gs: &State, ctx: &mut Rltk, page: usize) -> ViewLogResult {
     }
 }
 
+pub struct NoteBoxes {
+    pub boxes: HashSet<u32>,
+}
+
+impl NoteBoxes {
+    pub fn new() -> Self {
+        NoteBoxes {
+            boxes: HashSet::new(),
+        }
+    }
+
+    pub fn add_box(&mut self, id: u32) {
+        self.boxes.insert(id);
+    }
+
+    pub fn remove_box(&mut self, id: u32) {
+        self.boxes.remove(&id);
+    }
+
+    pub fn contains_id(&self, id: u32) -> bool {
+        self.boxes.contains(&id)
+    }
+}
+
 pub fn draw_notes(gs: &mut State, ctx: &mut Rltk) -> RunState {
     let rect = rltk::Rect::with_size(0, 0, NOTES_PANEL_WIDTH, NOTES_PANEL_HEIGHT);
     draw_box(ctx, rect, RGB::named(rltk::WHITE));
@@ -914,7 +942,11 @@ pub fn draw_notes(gs: &mut State, ctx: &mut Rltk) -> RunState {
         );
     }
 
-    let notes = gs.ecs.read_resource::<PlayerNotes>();
+    let mut note_boxes = gs.ecs.write_resource::<NoteBoxes>();
+
+    let mut click_zones: Vec<(i32, i32, i32, u32)> = vec![];
+
+    let mut notes = gs.ecs.write_resource::<PlayerNotes>();
 
     let mut y = 4;
     for note in notes.notes.iter() {
@@ -928,9 +960,75 @@ pub fn draw_notes(gs: &mut State, ctx: &mut Rltk) -> RunState {
                 RGB::named(rltk::BLACK),
                 &format!("{}", pair.0),
             );
+            if pair.2 {
+                click_zones.push((x, y, pair.0.len() as i32, note.id));
+                if note_boxes.contains_id(note.id) {
+                    rltk::draw_hollow_box(
+                        ctx,
+                        x - 1,
+                        y - 1,
+                        pair.0.len() as i32 + 1,
+                        2,
+                        RGB::named(rltk::WHITE),
+                        RGB::named(rltk::BLACK),
+                    );
+                }
+            }
             x += pair.0.len() as i32 + 1;
         }
         y += 2;
+    }
+
+    if ctx.left_click {
+        let (mouse_x, mouse_y) = ctx.mouse_pos();
+        for click_zone in click_zones {
+            if mouse_y == click_zone.1
+                && (click_zone.0..click_zone.0 + click_zone.2).contains(&mouse_x)
+            {
+                if note_boxes.contains_id(click_zone.3) {
+                    note_boxes.remove_box(click_zone.3);
+                } else {
+                    note_boxes.add_box(click_zone.3);
+                }
+            }
+        }
+    }
+
+    let mut cxns = gs.ecs.write_resource::<Vec<Connection>>();
+
+    if note_boxes.boxes.len() >= 2 {
+        let mut time = gs.ecs.write_resource::<Time>();
+        let mut log = gs.ecs.write_resource::<Log>();
+        let mut cxn_found = false;
+
+        for i in 0..cxns.len() {
+            let cxn = cxns[i].clone();
+            if note_boxes.contains_id(cxn.ids.0) && note_boxes.contains_id(cxn.ids.1) {
+                cxn_found = true;
+                let new_note = cxn.note;
+                log.log_message(
+                    &time,
+                    "You",
+                    new_note.get_log_msg().as_str(),
+                    RGB::named(rltk::GREEN),
+                );
+                notes.add_note(new_note);
+                cxns.remove(i);
+            }
+        }
+
+        if !cxn_found {
+            log.log_message(
+                &time,
+                "You",
+                "I can't think of a connection between these...",
+                RGB::named(rltk::WHITE),
+            );
+        }
+
+        time.advance_minute();
+
+        note_boxes.boxes.clear();
     }
 
     match ctx.key {

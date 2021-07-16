@@ -14,6 +14,17 @@ pub struct Map {
 
 impl Map {
     pub fn from_story(story: &Story, gs: &mut State) -> Self {
+        gs.ecs
+            .create_entity()
+            .with(Position { x: 2, y: 2 })
+            .with(Renderable {
+                glyph: rltk::to_cp437('V'),
+                fg: story.victim.clue.color,
+                bg: RGB::named(rltk::BLACK),
+            })
+            .with(story.victim.clue.clone())
+            .build();
+
         let mut x = 5;
         for suspect in story.suspects.iter() {
             gs.ecs
@@ -48,6 +59,8 @@ impl Map {
 
             x += 5;
         }
+
+        gs.ecs.insert(story.connections.clone());
 
         let tiles = vec![Tile::Empty; (MAP_WIDTH * MAP_HEIGHT) as usize];
 

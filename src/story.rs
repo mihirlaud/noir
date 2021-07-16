@@ -11,6 +11,7 @@ pub struct Story {
     pub victim: Victim,
     pub suspects: Vec<Suspect>,
     pub clues: Vec<Clue>,
+    pub connections: Vec<Connection>,
 }
 
 impl Story {
@@ -18,22 +19,25 @@ impl Story {
         let victim = Victim::gen_rand();
         let suspects = Suspect::gen_rand_suspects(&victim);
         let clues = Clue::gen_rand_clues(&victim);
+        let connections = Connection::gen_connections(&victim, suspects.clone(), clues.clone());
 
         Story {
             victim,
             suspects,
             clues,
+            connections,
         }
     }
 }
 
 #[derive(Debug)]
 pub struct Victim {
-    name: String,
-    age: i32,
-    weapon_used: String,
-    hair_found: String,
-    shoe_print: String,
+    pub name: String,
+    pub age: i32,
+    pub weapon_used: String,
+    pub hair_found: String,
+    pub shoe_print: String,
+    pub clue: Clue,
 }
 
 impl Victim {
@@ -48,11 +52,128 @@ impl Victim {
         let weapons = ["knife", "gun", "wrench", "poison"];
         let weapon_used = weapons[rand.range(0, weapons.len())].to_string();
 
-        let hair_colors = ["none", "black", "blonde", "red"];
+        let hair_colors = ["black", "blonde", "red"];
         let hair_found = hair_colors[rand.range(0, hair_colors.len())].to_string();
 
-        let shoe_prints = ["none", "small", "average", "large"];
+        let shoe_prints = ["small", "average", "large"];
         let shoe_print = shoe_prints[rand.range(0, shoe_prints.len())].to_string();
+
+        let color = rltk::RED;
+
+        let display = vec![
+            "      ___      ".to_string(),
+            "     /   \\     ".to_string(),
+            "     |   |     ".to_string(),
+            "     \\   /     ".to_string(),
+            "    __| |__    ".to_string(),
+            "   /       \\   ".to_string(),
+            "  / /|   |\\ \\  ".to_string(),
+            " / / |   | \\ \\ ".to_string(),
+            "/_/  |   |  \\_\\".to_string(),
+            "     |   |     ".to_string(),
+            "     / ^ \\     ".to_string(),
+            "    / / \\ \\    ".to_string(),
+            "   / /   \\ \\   ".to_string(),
+            "  /_/     \\_\\  ".to_string(),
+        ];
+
+        let mut tags = vec![];
+
+        match weapon_used.as_str() {
+            "knife" => {
+                tags.push(Note::new(
+                    vec![
+                        ("The".to_string(), rltk::WHITE, false),
+                        ("victim".to_string(), color, false),
+                        ("died from a".to_string(), rltk::WHITE, false),
+                        ("stab wound".to_string(), color, true),
+                    ],
+                    Some(ConnectionType::MurderWeapon),
+                ));
+            }
+            "gun" => {
+                tags.push(Note::new(
+                    vec![
+                        ("The".to_string(), rltk::WHITE, false),
+                        ("victim".to_string(), color, false),
+                        ("died from a".to_string(), rltk::WHITE, false),
+                        ("gunshot wound".to_string(), color, true),
+                    ],
+                    Some(ConnectionType::MurderWeapon),
+                ));
+            }
+            "wrench" => {
+                tags.push(Note::new(
+                    vec![
+                        ("The".to_string(), rltk::WHITE, false),
+                        ("victim".to_string(), color, false),
+                        ("died from".to_string(), rltk::WHITE, false),
+                        ("blunt force trauma".to_string(), color, true),
+                    ],
+                    Some(ConnectionType::MurderWeapon),
+                ));
+            }
+            "poison" => {
+                tags.push(Note::new(
+                    vec![
+                        ("The".to_string(), rltk::WHITE, false),
+                        ("victim".to_string(), color, false),
+                        ("died from".to_string(), rltk::WHITE, false),
+                        ("poisoning".to_string(), color, true),
+                    ],
+                    Some(ConnectionType::MurderWeapon),
+                ));
+            }
+            _ => {}
+        }
+
+        tags.push(Note::new(
+            vec![
+                ("The killer left".to_string(), rltk::WHITE, false),
+                (format!("{} footprints", shoe_print), color, true),
+                ("next to the".to_string(), rltk::WHITE, false),
+                ("victim".to_string(), color, false),
+            ],
+            Some(ConnectionType::EvidenceShoeSize),
+        ));
+
+        let mut markers = vec![];
+
+        for tag in tags.clone() {
+            let mut rand = rltk::RandomNumberGenerator::new();
+
+            let w = display[0].len() as i32;
+            let h = display.len() as i32;
+
+            loop {
+                let x: i32 = EXAM_PANEL_WIDTH / 2 - w / 2 + rand.range(0, w);
+                let y: i32 = EXAM_PANEL_HEIGHT / 2 - h / 2 + rand.range(0, h);
+
+                let mut available = true;
+
+                for (marker_x, marker_y, _, _) in markers.clone() {
+                    let marker_x: i32 = marker_x;
+                    let marker_y: i32 = marker_y;
+                    if (x - marker_x).abs() <= 2 && (y - marker_y).abs() <= 2 {
+                        available = false;
+                        break;
+                    }
+                }
+
+                if available {
+                    markers.push((x, y, tag, false));
+                    break;
+                }
+            }
+        }
+
+        let clue = Clue {
+            name: format!("Victim: {}", &name),
+            color: RGB::named(rltk::RED),
+            is_murder_weapon: false,
+            display,
+            markers,
+        };
 
         Victim {
             name,
@@ -60,6 +181,7 @@ impl Victim {
             weapon_used,
             hair_found,
             shoe_print,
+            clue,
         }
     }
 }
@@ -123,14 +245,96 @@ impl Suspect {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub enum ConnectionType {
+    MurderWeapon,
+    EvidenceHair,
+    EvidenceShoeSize,
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub struct Connection {
+    pub ids: (u32, u32),
+    pub cxn_type: ConnectionType,
+    pub note: Note,
+}
+
+impl Connection {
+    pub fn new(from: u32, to: u32, cxn_type: ConnectionType, note: Note) -> Self {
+        Connection {
+            ids: (from, to),
+            cxn_type,
+            note,
+        }
+    }
+
+    pub fn gen_connections(
+        victim: &Victim,
+        suspects: Vec<Suspect>,
+        clues: Vec<Clue>,
+    ) -> Vec<Connection> {
+        let mut cxns = vec![];
+
+        let mut mw_from = 0;
+        for marker in victim.clue.markers.clone() {
+            if marker.2.cxn_type.is_some()
+                && marker.2.cxn_type.unwrap() == ConnectionType::MurderWeapon
+            {
+                mw_from = marker.2.id;
+            }
+        }
+        let mut mw_to = 0;
+        for clue in clues {
+            for marker in clue.markers.clone() {
+                if marker.2.cxn_type.is_some()
+                    && marker.2.cxn_type.unwrap() == ConnectionType::MurderWeapon
+                {
+                    mw_to = marker.2.id;
+
+                    let note = Note::new(
+                        vec![
+                            ("Aha! The".to_string(), rltk::WHITE, false),
+                            ("murder weapon".to_string(), rltk::RED, false),
+                            ("must have been".to_string(), rltk::WHITE, false),
+                            (clue.name.clone(), rltk::RED, false),
+                        ],
+                        None,
+                    );
+
+                    cxns.push(Connection::new(
+                        mw_from,
+                        mw_to,
+                        ConnectionType::MurderWeapon,
+                        note,
+                    ));
+                }
+            }
+        }
+
+        cxns
+    }
+}
+
+static mut NOTE_ID: u32 = 0;
+
 #[derive(Component, Debug, PartialEq, Eq, Hash, Clone)]
 pub struct Note {
-    pub note: Vec<(String, (u8, u8, u8))>,
+    pub id: u32,
+    pub note: Vec<(String, (u8, u8, u8), bool)>,
+    pub cxn_type: Option<ConnectionType>,
 }
 
 impl Note {
-    pub fn new(note: Vec<(String, (u8, u8, u8))>) -> Self {
-        Note { note }
+    pub fn new(note: Vec<(String, (u8, u8, u8), bool)>, cxn_type: Option<ConnectionType>) -> Self {
+        unsafe {
+            let note = Note {
+                id: NOTE_ID,
+                note,
+                cxn_type,
+            };
+            NOTE_ID += 1;
+            note
+        }
     }
 
     pub fn get_log_msg(&self) -> String {
@@ -231,17 +435,28 @@ impl Clue {
             rltk::LIMEGREEN
         };
 
-        let tags = vec![
-            Note::new(vec![
-                ("Killer left a".to_string(), rltk::WHITE),
-                ("partial fingerprint".to_string(), color),
-            ]),
-            Note::new(vec![
-                ("Killer's".to_string(), rltk::WHITE),
-                ("hair".to_string(), color),
-                ("is on the weapon".to_string(), rltk::WHITE),
-            ]),
-        ];
+        let mut tags = vec![];
+
+        if is_murder_weapon {
+            tags.push(Note::new(
+                vec![
+                    ("While examining".to_string(), rltk::WHITE, false),
+                    (format!("{},", name.clone()), color, false),
+                    ("I found".to_string(), rltk::WHITE, false),
+                    ("blood".to_string(), color, true),
+                ],
+                Some(ConnectionType::MurderWeapon),
+            ));
+            tags.push(Note::new(
+                vec![
+                    ("While examining".to_string(), rltk::WHITE, false),
+                    (format!("{},", name.clone()), color, false),
+                    ("I found".to_string(), rltk::WHITE, false),
+                    (format!("{} hair", victim.hair_found), color, true),
+                ],
+                Some(ConnectionType::EvidenceHair),
+            ));
+        }
 
         let mut markers = vec![];
 
