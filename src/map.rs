@@ -27,17 +27,26 @@ impl Map {
 
         let mut x = 5;
         for suspect in story.suspects.iter() {
+            let mut rng = rltk::RandomNumberGenerator::new();
+            let cd = rng.range(75, 200);
             gs.ecs
                 .create_entity()
                 .with(Position { x, y: 10 })
+                .with(MovementAI {
+                    is_idle: false,
+                    cooldown: cd,
+                    max_cooldown: cd,
+                })
                 .with(Renderable {
                     glyph: rltk::to_cp437(suspect.name.chars().nth(0).unwrap()),
-                    fg: suspect.color,
+                    fg: RGB::named(suspect.color),
                     bg: rltk::RGB::named(rltk::BLACK),
                 })
                 .with(suspect.clone())
                 .with(ConversationAI {
                     innocent: !suspect.is_killer,
+                    evidence_hair: suspect.is_killer,
+                    evidence_shoe_size: suspect.is_killer,
                 })
                 .build();
 

@@ -1,4 +1,3 @@
-use std::collections::btree_map::Range;
 use std::collections::BTreeMap;
 use std::collections::HashSet;
 
@@ -11,7 +10,6 @@ use crate::components::TalkEntity;
 use crate::constants::*;
 use crate::story::Clue;
 use crate::story::Connection;
-use crate::story::ConnectionType;
 use crate::story::Note;
 use crate::story::PlayerNotes;
 use crate::story::Suspect;
@@ -500,7 +498,13 @@ pub fn draw_talk_panel(gs: &mut State, ctx: &mut Rltk) -> RunState {
         RGB::named(rltk::BLACK),
         "Name:",
     );
-    ctx.print_color(20, 3, speaker.color, RGB::named(rltk::BLACK), &speaker.name);
+    ctx.print_color(
+        20,
+        3,
+        RGB::named(speaker.color),
+        RGB::named(rltk::BLACK),
+        &speaker.name,
+    );
 
     ctx.print_color(
         14,
@@ -512,7 +516,7 @@ pub fn draw_talk_panel(gs: &mut State, ctx: &mut Rltk) -> RunState {
     ctx.print_color(
         19,
         6,
-        speaker.color,
+        RGB::named(speaker.color),
         RGB::named(rltk::BLACK),
         &format!("{}", speaker.age),
     );
@@ -586,6 +590,14 @@ pub fn draw_talk_panel(gs: &mut State, ctx: &mut Rltk) -> RunState {
         Some(key) => match key {
             VirtualKeyCode::Key1 => idx = Some(0),
             VirtualKeyCode::Key2 => idx = Some(1),
+            VirtualKeyCode::Key3 => idx = Some(2),
+            VirtualKeyCode::Key4 => idx = Some(3),
+            VirtualKeyCode::Key5 => idx = Some(4),
+            VirtualKeyCode::Key6 => idx = Some(5),
+            VirtualKeyCode::Key7 => idx = Some(6),
+            VirtualKeyCode::Key8 => idx = Some(7),
+            VirtualKeyCode::Key9 => idx = Some(8),
+            VirtualKeyCode::Key0 => idx = Some(9),
             VirtualKeyCode::Escape => {
                 return RunState::AwaitingInput;
             }
@@ -603,26 +615,34 @@ pub fn draw_talk_panel(gs: &mut State, ctx: &mut Rltk) -> RunState {
             options[idx].0.as_str(),
             RGB::named(rltk::WHITE),
         );
-        log.log_message(&time, &speaker.name, options[idx].1.as_str(), speaker.color);
+        log.log_message(
+            &time,
+            &speaker.name,
+            options[idx].1.as_str(),
+            RGB::named(speaker.color),
+        );
 
         time.advance_minute();
+
+        if options[idx].2.is_some() {
+            let mut notes = gs.ecs.write_resource::<PlayerNotes>();
+
+            notes.add_note(options[idx].2.clone().unwrap());
+        }
     }
 
     RunState::Talking
 }
 
-fn generate_conversation_options(speaker: &Suspect, ai: ConversationAI) -> Vec<(String, String)> {
+fn generate_conversation_options(
+    speaker: &Suspect,
+    ai: ConversationAI,
+) -> Vec<(String, String, Option<Note>)> {
     let mut options = vec![];
 
-    options.push((
-        "Hello. What is your name?".to_string(),
-        format!("My name is {}", speaker.name),
-    ));
-
-    options.push((
-        "Are you innocent?".to_string(),
-        format!("I am {}", if ai.innocent { "innocent!" } else { "guilty!" }),
-    ));
+    for option in speaker.convo_options.clone() {
+        options.push(option.clone());
+    }
 
     options
 }
@@ -1014,6 +1034,12 @@ pub fn draw_notes(gs: &mut State, ctx: &mut Rltk) -> RunState {
                 );
                 notes.add_note(new_note);
                 cxns.remove(i);
+
+                let mut options = gs.ecs.write_resource::<Options>();
+
+                options.add_option('A', "Accuse");
+
+                break;
             }
         }
 
@@ -1042,4 +1068,82 @@ pub fn draw_notes(gs: &mut State, ctx: &mut Rltk) -> RunState {
     }
 
     RunState::Notes
+}
+
+pub fn draw_accuse_panel(gs: &mut State, ctx: &mut Rltk) -> RunState {
+    let rect = rltk::Rect::with_size(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+    draw_box(ctx, rect, RGB::named(rltk::WHITE));
+
+    ctx.print_color(
+        1,
+        1,
+        RGB::named(rltk::WHITE),
+        RGB::named(rltk::BLACK),
+        "ACCUSE",
+    );
+
+    ctx.print_color(
+        1,
+        SCREEN_HEIGHT - 2,
+        RGB::named(rltk::WHITE),
+        RGB::named(rltk::BLACK),
+        "Use your mouse to answer the questions. Press [Esc] to leave.",
+    );
+
+    ctx.print_color(
+        2,
+        5,
+        RGB::named(rltk::WHITE),
+        RGB::named(rltk::BLACK),
+        "Who is the killer?",
+    );
+
+    ctx.print_color(
+        2,
+        8,
+        RGB::named(rltk::WHITE),
+        RGB::named(rltk::BLACK),
+        "What is the murder weapon?",
+    );
+
+    ctx.print_color(
+        2,
+        11,
+        RGB::named(rltk::WHITE),
+        RGB::named(rltk::BLACK),
+        "Provide one piece of evidence: ",
+    );
+
+    ctx.print_color(
+        2,
+        14,
+        RGB::named(rltk::WHITE),
+        RGB::named(rltk::BLACK),
+        "Provide another piece of evidence: ",
+    );
+
+    ctx.set(0, 17, RGB::named(rltk::WHITE), RGB::named(rltk::BLACK), 195);
+    ctx.set(
+        SCREEN_WIDTH - 1,
+        17,
+        RGB::named(rltk::WHITE),
+        RGB::named(rltk::BLACK),
+        180,
+    );
+
+    for x in 1..SCREEN_WIDTH - 1 {
+        ctx.set(x, 17, RGB::named(rltk::WHITE), RGB::named(rltk::BLACK), 196);
+    }
+
+    match ctx.key {
+        None => {}
+        Some(key) => match key {
+            VirtualKeyCode::Escape => {
+                return RunState::AwaitingInput;
+            }
+            _ => {}
+        },
+    }
+
+    RunState::Accuse
 }

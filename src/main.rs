@@ -10,8 +10,8 @@ use std::collections::BTreeMap;
 use components::*;
 use constants::*;
 use gui::{
-    draw_examination_panel, draw_log, draw_notes, draw_sidebar, draw_talk_panel, view_log,
-    GameOverResult, MainMenuSelection, PauseMenuSelection,
+    draw_accuse_panel, draw_examination_panel, draw_log, draw_notes, draw_sidebar, draw_talk_panel,
+    view_log, GameOverResult, MainMenuSelection, PauseMenuSelection,
 };
 use rltk::{Console, GameState, Rltk, RGB};
 use specs::prelude::*;
@@ -29,6 +29,7 @@ pub enum RunState {
     Talking,
     Examining,
     Notes,
+    Accuse,
     Log { page: usize },
     Paused { selection: PauseMenuSelection },
     GameOver { result: GameOverResult },
@@ -44,6 +45,8 @@ impl State {
         conversation_checker.run_now(&self.ecs);
         let mut examination_checker = ExaminationChecker {};
         examination_checker.run_now(&self.ecs);
+        let mut movement_checker = MovementChecker {};
+        movement_checker.run_now(&self.ecs);
         self.ecs.maintain();
     }
 
@@ -55,6 +58,7 @@ impl State {
         self.ecs.register::<ConversationAI>();
         self.ecs.register::<Suspect>();
         self.ecs.register::<Clue>();
+        self.ecs.register::<MovementAI>();
 
         self.ecs.insert(RunState::MainMenu {
             selection: MainMenuSelection::Play,
@@ -132,6 +136,7 @@ impl GameState for State {
         match newrunstate {
             RunState::MainMenu { .. } => {}
             RunState::GameOver { .. } => {}
+            RunState::Accuse { .. } => {}
             RunState::Talking => {
                 draw_log(self, ctx);
                 draw_sidebar(self, ctx);
@@ -207,6 +212,9 @@ impl GameState for State {
             }
             RunState::Notes => {
                 newrunstate = draw_notes(self, ctx);
+            }
+            RunState::Accuse => {
+                newrunstate = draw_accuse_panel(self, ctx);
             }
             RunState::Log { page } => {
                 let result = view_log(self, ctx, page);

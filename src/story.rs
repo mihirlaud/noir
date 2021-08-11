@@ -190,10 +190,11 @@ impl Victim {
 pub struct Suspect {
     pub name: String,
     pub age: i32,
-    pub color: RGB,
+    pub color: (u8, u8, u8),
     pub is_killer: bool,
     pub hair_color: String,
     pub shoe_size: String,
+    pub convo_options: Vec<(String, String, Option<Note>)>,
 }
 
 impl Suspect {
@@ -218,19 +219,81 @@ impl Suspect {
             if victim.shoe_print != "none" {
                 shoe_size = victim.shoe_print.to_string();
             }
+        } else {
+            if hair_color == victim.hair_found.to_string()
+                && shoe_size == victim.shoe_print.to_string()
+            {
+                let mut rng = rltk::RandomNumberGenerator::new();
+
+                match rng.range(0, 2) {
+                    0 => loop {
+                        hair_color = hair_colors[rand.range(0, hair_colors.len())].to_string();
+                        if hair_color != victim.hair_found.to_string() {
+                            break;
+                        }
+                    },
+                    _ => loop {
+                        shoe_size = shoe_sizes[rand.range(0, shoe_sizes.len())].to_string();
+                        if shoe_size != victim.shoe_print.to_string() {
+                            break;
+                        }
+                    },
+                }
+            }
         }
+
+        let color = if is_killer { rltk::RED } else { rltk::YELLOW };
+
+        let mut convo_options = vec![];
+
+        convo_options.push((
+            "Hello. What is your name?".to_string(),
+            format!("Hello Detective. My name is {}", name.clone()),
+            None,
+        ));
+
+        convo_options.push((
+            "What is your shoe size?".to_string(),
+            format!("My shoe size is {}", shoe_size.clone()),
+            Some(Note::new(
+                vec![
+                    (format!("{}", name.clone()), color, false),
+                    ("has".to_string(), rltk::WHITE, false),
+                    (format!("{} shoe size", shoe_size), color, true),
+                ],
+                if is_killer {
+                    Some(ConnectionType::EvidenceShoeSize)
+                } else {
+                    None
+                },
+            )),
+        ));
+
+        convo_options.push((
+            "What is your hair color?".to_string(),
+            format!("My hair color is {}", hair_color.clone()),
+            Some(Note::new(
+                vec![
+                    (format!("{}", name.clone()), color, false),
+                    ("has".to_string(), rltk::WHITE, false),
+                    (format!("{} hair", hair_color), color, true),
+                ],
+                if is_killer {
+                    Some(ConnectionType::EvidenceHair)
+                } else {
+                    None
+                },
+            )),
+        ));
 
         Suspect {
             name,
             age,
-            color: if is_killer {
-                RGB::named(rltk::RED)
-            } else {
-                RGB::named(rltk::YELLOW)
-            },
+            color,
             is_killer,
             hair_color,
             shoe_size,
+            convo_options,
         }
     }
 
@@ -275,42 +338,88 @@ impl Connection {
     ) -> Vec<Connection> {
         let mut cxns = vec![];
 
-        let mut mw_from = 0;
-        for marker in victim.clue.markers.clone() {
-            if marker.2.cxn_type.is_some()
-                && marker.2.cxn_type.unwrap() == ConnectionType::MurderWeapon
-            {
-                mw_from = marker.2.id;
-            }
-        }
-        let mut mw_to = 0;
-        for clue in clues {
-            for marker in clue.markers.clone() {
-                if marker.2.cxn_type.is_some()
-                    && marker.2.cxn_type.unwrap() == ConnectionType::MurderWeapon
-                {
-                    mw_to = marker.2.id;
+        for cxn_type in [
+            ConnectionType::MurderWeapon,
+            ConnectionType::EvidenceHair,
+            ConnectionType::EvidenceShoeSize,
+        ]
+        .iter()
+        {
+            let mut ids = vec![];
+            let mut note = Note::new(vec![], None);
 
-                    let note = Note::new(
-                        vec![
-                            ("Aha! The".to_string(), rltk::WHITE, false),
-                            ("murder weapon".to_string(), rltk::RED, false),
-                            ("must have been".to_string(), rltk::WHITE, false),
-                            (clue.name.clone(), rltk::RED, false),
-                        ],
-                        None,
-                    );
-
-                    cxns.push(Connection::new(
-                        mw_from,
-                        mw_to,
-                        ConnectionType::MurderWeapon,
-                        note,
-                    ));
+            for marker in victim.clue.markers.clone() {
+                if marker.2.cxn_type.is_some() && marker.2.cxn_type.unwrap() == cxn_type.clone() {
+                    ids.push(marker.2.id);
                 }
             }
+
+            for clue in clues.clone() {
+                for marker in clue.markers.clone() {
+                    if marker.2.cxn_type.is_some() && marker.2.cxn_type.unwrap() == cxn_type.clone()
+                    {
+                        ids.push(marker.2.id);
+
+                        if cxn_type.clone() == ConnectionType::MurderWeapon {
+                            note = Note::new(
+                                vec![
+                                    ("Aha!".to_string(), rltk::GREEN, false),
+                                    ("The".to_string(), rltk::WHITE, false),
+                                    ("murder weapon".to_string(), rltk::RED, false),
+                                    ("must have been".to_string(), rltk::WHITE, false),
+                                    (clue.name.clone(), rltk::RED, false),
+                                ],
+                                None,
+                            );
+                        }
+                    }
+                }
+            }
+
+            for suspect in suspects.clone() {
+                for (_, _, s_note) in suspect.convo_options.clone() {
+                    if s_note.is_some()
+                        && s_note.clone().unwrap().cxn_type.is_some()
+                        && s_note.clone().unwrap().cxn_type.unwrap() == cxn_type.clone()
+                    {
+                        ids.push(s_note.clone().unwrap().id);
+
+                        if cxn_type.clone() == ConnectionType::EvidenceHair {
+                            note = Note::new(
+                                vec![
+                                    ("Aha!".to_string(), rltk::GREEN, false),
+                                    (format!("{}", suspect.name.clone()), rltk::RED, false),
+                                    ("has the same".to_string(), rltk::WHITE, false),
+                                    ("hair color".to_string(), rltk::RED, false),
+                                    ("as the killer".to_string(), rltk::WHITE, false),
+                                ],
+                                None,
+                            );
+                        } else if cxn_type.clone() == ConnectionType::EvidenceShoeSize {
+                            note = Note::new(
+                                vec![
+                                    ("Aha!".to_string(), rltk::GREEN, false),
+                                    (format!("{}", suspect.name.clone()), rltk::RED, false),
+                                    ("has the same".to_string(), rltk::WHITE, false),
+                                    ("shoe size".to_string(), rltk::RED, false),
+                                    ("as the killer".to_string(), rltk::WHITE, false),
+                                ],
+                                None,
+                            );
+                        }
+                    }
+                }
+            }
+
+            cxns.push(Connection::new(
+                ids[0],
+                ids[1],
+                cxn_type.clone(),
+                note.clone(),
+            ));
         }
 
+        rltk::console::log(&format!("{}", cxns.len()));
         cxns
     }
 }
